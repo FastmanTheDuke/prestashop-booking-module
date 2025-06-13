@@ -1,0 +1,768 @@
+/**
+ * Styles pour l'interface front de paiement
+ * Design moderne et responsive pour les réservations
+ */
+
+/* ==========================================================================
+   VARIABLES CSS
+   ========================================================================== */
+
+:root {
+    --primary-color: #007bff;
+    --success-color: #28a745;
+    --warning-color: #ffc107;
+    --danger-color: #dc3545;
+    --info-color: #17a2b8;
+    --light-color: #f8f9fa;
+    --dark-color: #343a40;
+    --border-radius: 8px;
+    --box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    --transition: all 0.3s ease;
+}
+
+/* ==========================================================================
+   LAYOUT GÉNÉRAL
+   ========================================================================== */
+
+.payment-container {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    min-height: 100vh;
+    padding: 30px 0;
+}
+
+.payment-content {
+    background: white;
+    border-radius: var(--border-radius);
+    box-shadow: var(--box-shadow);
+    overflow: hidden;
+    margin: 0 auto;
+    max-width: 1000px;
+}
+
+/* ==========================================================================
+   EN-TÊTE DE PAIEMENT
+   ========================================================================== */
+
+.payment-header {
+    background: linear-gradient(135deg, var(--success-color), #20c997);
+    color: white;
+    padding: 30px;
+    text-align: center;
+    position: relative;
+    overflow: hidden;
+}
+
+.payment-header::before {
+    content: '';
+    position: absolute;
+    top: -50%;
+    left: -50%;
+    width: 200%;
+    height: 200%;
+    background: repeating-linear-gradient(
+        45deg,
+        transparent,
+        transparent 10px,
+        rgba(255,255,255,0.1) 10px,
+        rgba(255,255,255,0.1) 20px
+    );
+    animation: headerPattern 20s linear infinite;
+}
+
+@keyframes headerPattern {
+    0% { transform: translate(-50%, -50%) rotate(0deg); }
+    100% { transform: translate(-50%, -50%) rotate(360deg); }
+}
+
+.payment-header-content {
+    position: relative;
+    z-index: 1;
+}
+
+.payment-header .icon {
+    font-size: 3rem;
+    margin-bottom: 15px;
+    animation: successPulse 2s infinite;
+}
+
+@keyframes successPulse {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.1); }
+}
+
+.payment-header h1 {
+    font-size: 2.5rem;
+    font-weight: 300;
+    margin-bottom: 10px;
+    text-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.payment-header .subtitle {
+    font-size: 1.1rem;
+    opacity: 0.9;
+    font-weight: 300;
+}
+
+/* ==========================================================================
+   CARTES DE CONTENU
+   ========================================================================== */
+
+.content-card {
+    background: white;
+    border-radius: var(--border-radius);
+    box-shadow: var(--box-shadow);
+    margin-bottom: 30px;
+    overflow: hidden;
+    transition: var(--transition);
+}
+
+.content-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 5px 20px rgba(0,0,0,0.15);
+}
+
+.card-header {
+    background: linear-gradient(135deg, var(--primary-color), #0056b3);
+    color: white;
+    padding: 20px;
+    border-bottom: none;
+}
+
+.card-header h4 {
+    margin: 0;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.card-body {
+    padding: 30px;
+}
+
+/* ==========================================================================
+   RÉSUMÉ DE RÉSERVATION
+   ========================================================================== */
+
+.reservation-summary {
+    background: linear-gradient(135deg, #f8f9fa, #e9ecef);
+    border-left: 4px solid var(--primary-color);
+    border-radius: var(--border-radius);
+    padding: 25px;
+    margin-bottom: 30px;
+}
+
+.reservation-info {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 30px;
+}
+
+.info-section h5 {
+    color: var(--primary-color);
+    font-weight: 600;
+    margin-bottom: 15px;
+    padding-bottom: 8px;
+    border-bottom: 2px solid var(--primary-color);
+}
+
+.info-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.info-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 0;
+    border-bottom: 1px solid rgba(0,0,0,0.1);
+}
+
+.info-item:last-child {
+    border-bottom: none;
+}
+
+.info-label {
+    font-weight: 600;
+    color: #6c757d;
+}
+
+.info-value {
+    color: var(--dark-color);
+    font-weight: 500;
+}
+
+.booking-reference {
+    font-family: 'Courier New', monospace;
+    background: var(--primary-color);
+    color: white;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-weight: bold;
+}
+
+/* ==========================================================================
+   DÉTAILS DES PRIX
+   ========================================================================== */
+
+.pricing-table {
+    background: white;
+    border-radius: var(--border-radius);
+    overflow: hidden;
+    box-shadow: var(--box-shadow);
+}
+
+.pricing-table table {
+    width: 100%;
+    margin: 0;
+}
+
+.pricing-table td,
+.pricing-table th {
+    padding: 15px 20px;
+    border: none;
+    border-bottom: 1px solid #e9ecef;
+}
+
+.pricing-table tbody tr:hover {
+    background: rgba(0, 123, 255, 0.05);
+}
+
+.price-item {
+    font-size: 1.1rem;
+}
+
+.price-amount {
+    font-weight: 600;
+    color: var(--success-color);
+}
+
+.deposit-row {
+    background: rgba(255, 193, 7, 0.1);
+    border-left: 4px solid var(--warning-color);
+}
+
+.total-row {
+    background: linear-gradient(135deg, var(--primary-color), #0056b3);
+    color: white;
+    font-weight: 700;
+    font-size: 1.2rem;
+}
+
+.total-row td {
+    border-bottom: none;
+}
+
+/* ==========================================================================
+   ACTIONS DE PAIEMENT
+   ========================================================================== */
+
+.payment-actions {
+    text-align: center;
+    padding: 40px 30px;
+    background: linear-gradient(135deg, #f8f9fa, #e9ecef);
+}
+
+.payment-btn {
+    background: linear-gradient(135deg, var(--primary-color), #0056b3);
+    border: none;
+    color: white;
+    font-size: 1.2rem;
+    font-weight: 600;
+    padding: 15px 40px;
+    border-radius: 50px;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    transition: var(--transition);
+    box-shadow: 0 4px 15px rgba(0, 123, 255, 0.3);
+    position: relative;
+    overflow: hidden;
+}
+
+.payment-btn::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
+    transition: left 0.5s;
+}
+
+.payment-btn:hover::before {
+    left: 100%;
+}
+
+.payment-btn:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 8px 25px rgba(0, 123, 255, 0.4);
+    color: white;
+    text-decoration: none;
+}
+
+.payment-btn:active {
+    transform: translateY(-1px);
+}
+
+.payment-btn .icon {
+    font-size: 1.5rem;
+}
+
+.payment-amount {
+    display: block;
+    font-size: 0.9rem;
+    opacity: 0.9;
+    margin-top: 5px;
+}
+
+.payment-alternatives {
+    margin-top: 30px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 20px;
+    flex-wrap: wrap;
+}
+
+.btn-secondary {
+    background: transparent;
+    border: 2px solid #6c757d;
+    color: #6c757d;
+    font-weight: 500;
+    padding: 10px 25px;
+    border-radius: 25px;
+    text-decoration: none;
+    transition: var(--transition);
+}
+
+.btn-secondary:hover {
+    background: #6c757d;
+    color: white;
+    text-decoration: none;
+}
+
+/* ==========================================================================
+   INFORMATION SÉCURITÉ
+   ========================================================================== */
+
+.security-info {
+    background: linear-gradient(135deg, #e3f2fd, #bbdefb);
+    border: 1px solid #2196f3;
+    border-radius: var(--border-radius);
+    padding: 20px;
+    margin: 30px 0;
+    text-align: center;
+}
+
+.security-info .icon {
+    font-size: 2rem;
+    color: var(--info-color);
+    margin-bottom: 10px;
+}
+
+.security-info h6 {
+    color: var(--info-color);
+    font-weight: 600;
+    margin-bottom: 10px;
+}
+
+.security-badges {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 15px;
+    margin-top: 15px;
+    flex-wrap: wrap;
+}
+
+.security-badge {
+    background: white;
+    padding: 8px 16px;
+    border-radius: 20px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--info-color);
+    box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+}
+
+/* ==========================================================================
+   CONDITIONS LÉGALES
+   ========================================================================== */
+
+.legal-info {
+    background: white;
+    border-radius: var(--border-radius);
+    padding: 30px;
+    margin-top: 30px;
+    box-shadow: var(--box-shadow);
+}
+
+.legal-section {
+    margin-bottom: 25px;
+}
+
+.legal-section:last-child {
+    margin-bottom: 0;
+}
+
+.legal-section h6 {
+    color: var(--primary-color);
+    font-weight: 600;
+    margin-bottom: 10px;
+}
+
+.legal-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.legal-list li {
+    padding: 5px 0;
+    padding-left: 20px;
+    position: relative;
+    color: #6c757d;
+    font-size: 0.9rem;
+}
+
+.legal-list li::before {
+    content: '•';
+    color: var(--primary-color);
+    position: absolute;
+    left: 0;
+    top: 5px;
+}
+
+.legal-footer {
+    text-align: center;
+    padding-top: 20px;
+    border-top: 1px solid #e9ecef;
+    margin-top: 20px;
+    font-size: 0.8rem;
+    color: #6c757d;
+}
+
+.legal-footer a {
+    color: var(--primary-color);
+    text-decoration: none;
+}
+
+.legal-footer a:hover {
+    text-decoration: underline;
+}
+
+/* ==========================================================================
+   PAGES DE RÉSULTAT
+   ========================================================================== */
+
+.result-container {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    min-height: 100vh;
+    padding: 30px 0;
+}
+
+.result-content {
+    background: white;
+    border-radius: var(--border-radius);
+    box-shadow: var(--box-shadow);
+    overflow: hidden;
+    margin: 0 auto;
+    max-width: 800px;
+}
+
+.result-header {
+    padding: 40px;
+    text-align: center;
+}
+
+.result-success .result-header {
+    background: linear-gradient(135deg, var(--success-color), #20c997);
+    color: white;
+}
+
+.result-error .result-header {
+    background: linear-gradient(135deg, var(--danger-color), #c82333);
+    color: white;
+}
+
+.result-warning .result-header {
+    background: linear-gradient(135deg, var(--warning-color), #ffab00);
+    color: #212529;
+}
+
+.result-icon {
+    font-size: 4rem;
+    margin-bottom: 20px;
+    animation: resultIcon 0.8s ease-out;
+}
+
+@keyframes resultIcon {
+    0% {
+        transform: scale(0) rotate(180deg);
+        opacity: 0;
+    }
+    100% {
+        transform: scale(1) rotate(0deg);
+        opacity: 1;
+    }
+}
+
+.result-title {
+    font-size: 2.5rem;
+    font-weight: 300;
+    margin-bottom: 15px;
+}
+
+.result-subtitle {
+    font-size: 1.1rem;
+    opacity: 0.9;
+}
+
+/* ==========================================================================
+   TIMELINE
+   ========================================================================== */
+
+.timeline {
+    position: relative;
+    padding: 30px 0;
+}
+
+.timeline::before {
+    content: '';
+    position: absolute;
+    left: 30px;
+    top: 0;
+    bottom: 0;
+    width: 2px;
+    background: #e9ecef;
+}
+
+.timeline-item {
+    position: relative;
+    padding-left: 70px;
+    margin-bottom: 30px;
+}
+
+.timeline-item:last-child {
+    margin-bottom: 0;
+}
+
+.timeline-marker {
+    position: absolute;
+    left: 20px;
+    top: 0;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    color: white;
+    font-weight: 600;
+}
+
+.timeline-item.completed .timeline-marker {
+    background: var(--success-color);
+}
+
+.timeline-item.pending .timeline-marker {
+    background: var(--warning-color);
+    color: #212529;
+}
+
+.timeline-content h6 {
+    font-weight: 600;
+    color: var(--dark-color);
+    margin-bottom: 5px;
+}
+
+.timeline-content p {
+    color: #6c757d;
+    margin: 0;
+    font-size: 0.9rem;
+}
+
+/* ==========================================================================
+   RESPONSIVE
+   ========================================================================== */
+
+@media (max-width: 768px) {
+    .payment-container,
+    .result-container {
+        padding: 15px;
+    }
+    
+    .payment-header,
+    .result-header {
+        padding: 30px 20px;
+    }
+    
+    .payment-header h1,
+    .result-title {
+        font-size: 2rem;
+    }
+    
+    .card-body {
+        padding: 20px;
+    }
+    
+    .reservation-info {
+        grid-template-columns: 1fr;
+        gap: 20px;
+    }
+    
+    .payment-actions {
+        padding: 30px 20px;
+    }
+    
+    .payment-btn {
+        width: 100%;
+        justify-content: center;
+        margin-bottom: 15px;
+    }
+    
+    .payment-alternatives {
+        flex-direction: column;
+        gap: 10px;
+    }
+    
+    .btn-secondary {
+        width: 100%;
+        text-align: center;
+    }
+    
+    .security-badges {
+        justify-content: center;
+    }
+    
+    .timeline::before {
+        left: 15px;
+    }
+    
+    .timeline-item {
+        padding-left: 45px;
+    }
+    
+    .timeline-marker {
+        left: 6px;
+        width: 18px;
+        height: 18px;
+        font-size: 10px;
+    }
+    
+    .legal-info {
+        padding: 20px;
+    }
+}
+
+@media (max-width: 480px) {
+    .payment-header .icon,
+    .result-icon {
+        font-size: 2.5rem;
+    }
+    
+    .payment-header h1,
+    .result-title {
+        font-size: 1.5rem;
+    }
+    
+    .payment-btn {
+        font-size: 1rem;
+        padding: 12px 30px;
+    }
+    
+    .info-item {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 5px;
+    }
+    
+    .pricing-table td,
+    .pricing-table th {
+        padding: 10px 15px;
+        font-size: 0.9rem;
+    }
+}
+
+/* ==========================================================================
+   ANIMATIONS SUPPLÉMENTAIRES
+   ========================================================================== */
+
+@keyframes slideInUp {
+    from {
+        opacity: 0;
+        transform: translateY(30px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@keyframes fadeInScale {
+    from {
+        opacity: 0;
+        transform: scale(0.8);
+    }
+    to {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+.content-card {
+    animation: slideInUp 0.6s ease-out;
+}
+
+.payment-btn {
+    animation: fadeInScale 0.8s ease-out;
+}
+
+.timeline-item {
+    animation: slideInUp 0.6s ease-out;
+}
+
+/* Délais d'animation pour effet cascade */
+.content-card:nth-child(1) { animation-delay: 0.1s; }
+.content-card:nth-child(2) { animation-delay: 0.2s; }
+.content-card:nth-child(3) { animation-delay: 0.3s; }
+
+.timeline-item:nth-child(1) { animation-delay: 0.1s; }
+.timeline-item:nth-child(2) { animation-delay: 0.2s; }
+.timeline-item:nth-child(3) { animation-delay: 0.3s; }
+.timeline-item:nth-child(4) { animation-delay: 0.4s; }
+
+/* ==========================================================================
+   DARK MODE
+   ========================================================================== */
+
+@media (prefers-color-scheme: dark) {
+    .content-card {
+        background: #2c3e50;
+        color: white;
+    }
+    
+    .reservation-summary {
+        background: linear-gradient(135deg, #34495e, #2c3e50);
+        color: white;
+    }
+    
+    .info-label {
+        color: #bdc3c7;
+    }
+    
+    .legal-info {
+        background: #2c3e50;
+        color: white;
+    }
+    
+    .legal-list li {
+        color: #bdc3c7;
+    }
+}
