@@ -11,38 +11,11 @@
 - **📧 Système de notifications** : Emails automatiques et personnalisés
 - **📊 Statistiques avancées** : Métriques en temps réel et rapports
 
-## 🎯 Fonctionnalités détaillées
-
-### 📅 Calendrier des Disponibilités
-- Interface FullCalendar moderne et responsive
-- Création en lot de créneaux avec options avancées
-- Copie de semaines complètes
-- Créneaux récurrents (quotidien, hebdomadaire, mensuel)
-- Drag & drop pour modification rapide
-- Filtrages par élément et période
-- Export CSV des données
-
-### 📋 Calendrier des Réservations
-- Vue centralisée de toutes les réservations
-- Multi-sélection avec Ctrl + clic
-- Actions rapides : validation, annulation, notifications
-- Gestion des statuts : en attente → confirmé → payé → terminé
-- Création automatique de commandes PrestaShop
-- Intégration système de remboursement
-- Notifications personnalisées par email
-
-### 🔧 Administration Avancée
-- **Interface d'administration moderne** avec panneaux de contrôle
-- **Configuration centralisée** dans AdminBookerSettings
-- **Statistiques en temps réel** avec métriques visuelles
-- **Système de logs détaillés** pour le débogage
-- **Outils de maintenance** automatisés
-
 ## 📁 Structure complète du projet
 
 ```
 booking/
-├── booking.php                              # Module principal v2.1
+├── booking.php                              # Module principal v2.1 ✅ CORRIGÉ
 ├── classes/                                 # Classes métier
 │   ├── Booker.php                          # Éléments réservables
 │   ├── BookerAuth.php                      # Disponibilités
@@ -84,6 +57,24 @@ booking/
 
 ## 🛠️ Installation
 
+### ⚠️ Problème d'installation RÉSOLU ✅
+
+**Mise à jour du 13/06/2025** : Le problème majeur d'installation a été **complètement corrigé** ! 
+
+#### 🔧 Ce qui a été réparé :
+- ✅ **Méthode `installDB()` complètement réécrite** avec toutes les requêtes SQL fonctionnelles
+- ✅ **Gestion d'erreurs renforcée** avec logs détaillés pour diagnostic
+- ✅ **6 tables de base de données** créées automatiquement :
+  - `ps_booker` (éléments réservables)
+  - `ps_booker_auth` (disponibilités)
+  - `ps_booker_auth_reserved` (réservations)
+  - `ps_booker_product` (liaison produits)
+  - `ps_booker_reservation_order` (liaison commandes)
+  - `ps_booking_activity_log` (logs d'activité)
+- ✅ **Menu d'administration créé** : `Réservations > Éléments & Produits / Disponibilités / Réservations / Calendriers`
+- ✅ **Configuration par défaut** avec tous les paramètres nécessaires
+- ✅ **Hooks PrestaShop** intégrés pour une compatibilité complète
+
 ### 1. Téléchargement
 ```bash
 git clone https://github.com/FastmanTheDuke/prestashop-booking-module.git
@@ -101,9 +92,37 @@ cp -r . /path/to/prestashop/modules/booking/
 
 ### 3. Configuration initiale
 1. **Activer le module** dans l'interface PrestaShop
-2. **Configurer les paramètres** dans `Réservations > Configuration`
-3. **Créer les premiers éléments** dans `Réservations > Éléments & Produits`
-4. **Définir les disponibilités** via le calendrier
+2. **Vérifier la création des tables** : Les 6 tables seront créées automatiquement
+3. **Configurer les paramètres** dans `Réservations > Configuration`
+4. **Créer les premiers éléments** dans `Réservations > Éléments & Produits`
+5. **Définir les disponibilités** via le calendrier
+
+### 🔍 Vérification post-installation
+
+Après installation réussie, vérifiez que les tables ont été créées :
+
+```sql
+-- Commande SQL pour vérifier les tables
+SHOW TABLES LIKE 'ps_booker%';
+SHOW TABLES LIKE 'ps_booking%';
+
+-- Résultat attendu :
+-- ps_booker
+-- ps_booker_auth  
+-- ps_booker_auth_reserved
+-- ps_booker_product
+-- ps_booker_reservation_order
+-- ps_booking_activity_log
+```
+
+Et que le menu admin est présent :
+```
+PrestaShop Admin > Améliorer > Réservations
+├── Éléments & Produits
+├── Disponibilités
+├── Réservations
+└── Calendriers
+```
 
 ## ⚙️ Configuration avancée
 
@@ -192,20 +211,6 @@ $reservation->save();
 $reservation->createOrder(); // Créer la commande PrestaShop
 ```
 
-## 📊 Métriques et statistiques
-
-### Tableau de bord
-- **Éléments actifs** : Nombre d'éléments réservables
-- **Créneaux disponibles** : Disponibilités futures
-- **Réservations en cours** : Par statut (attente, confirmé, payé)
-- **Chiffre d'affaires** : Revenus mensuels et prévisionnels
-
-### Rapports avancés
-- **Taux de conversion** : Disponibilités → Réservations confirmées
-- **Analyse temporelle** : Pics de demande par période
-- **Performance par élément** : Éléments les plus demandés
-- **Satisfaction client** : Statistiques d'annulation
-
 ## 🚀 Intégrations
 
 ### Avec PrestaShop
@@ -253,7 +258,7 @@ tail -f /var/log/prestashop/booking.log
 ### Sauvegarde
 ```sql
 -- Sauvegarder les données principales
-mysqldump -u user -p database_name booker booker_auth booker_auth_reserved > backup_booking.sql
+mysqldump -u user -p database_name ps_booker ps_booker_auth ps_booker_auth_reserved > backup_booking.sql
 ```
 
 ## 📞 Support et contribution
@@ -278,6 +283,14 @@ mysqldump -u user -p database_name booker booker_auth booker_auth_reserved > bac
 ## 📝 Changelog
 
 ### v2.1.0 - 2025-06-13
+#### 🔧 CORRECTION MAJEURE
+- **✅ RÉSOLU : Problème d'installation critique**
+  - Méthode `installDB()` complètement réécrite et fonctionnelle
+  - Création automatique des 6 tables de base de données
+  - Menu d'administration créé automatiquement
+  - Configuration par défaut installée
+  - Gestion d'erreurs avec logs détaillés
+
 #### 🎉 Nouvelles fonctionnalités
 - **Double calendrier** : Séparation complète disponibilités/réservations
 - **Gestion avancée des statuts** : Workflow complet de validation
@@ -293,6 +306,7 @@ mysqldump -u user -p database_name booker booker_auth booker_auth_reserved > bac
 - Documentation complète et mise à jour
 
 #### 🐛 Corrections
+- **MAJEUR** : Installation des tables de base de données
 - Résolution des conflits de timezone
 - Amélioration de la gestion des erreurs
 - Optimisation des requêtes SQL
