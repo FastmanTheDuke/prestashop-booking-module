@@ -6,7 +6,7 @@ class AdminBookerController extends ModuleAdminController
 {
     protected $_module = NULL;
     public $controller_type='admin';   
-    protected $position_identifier = 'id_booker';
+    protected $position_identifier = 'id';
 
     public function __construct()
     {
@@ -14,17 +14,17 @@ class AdminBookerController extends ModuleAdminController
         $this->context = Context::getContext();
         $this->bootstrap = true;
         $this->table = 'booker';
-        $this->identifier = 'id_booker';
+        $this->identifier = 'id';
         $this->className = 'Booker';
-        $this->_defaultOrderBy = 'id_booker';
+        $this->_defaultOrderBy = 'id';
         $this->_defaultOrderWay = 'DESC';
-        $this->lang = true;
+        $this->lang = false; // Désactiver le multilangue car table ps_booker_lang n'existe pas
         $this->allow_export = true;
 		
         $this->fields_list = array(
-            'id_booker' => array(
+            'id' => array(
                 'title' => 'ID', 
-                'filter_key' => 'a!id_booker', 
+                'filter_key' => 'a!id', 
                 'align' => 'center', 
                 'width' => 25,
                 'class' => 'fixed-width-xs',
@@ -50,26 +50,16 @@ class AdminBookerController extends ModuleAdminController
                 'type' => 'price',
                 'remove_onclick' => true
             ),
-            'capacity' => array(
+            'max_bookings' => array(
                 'title' => 'Capacité', 
                 'width' => '60',
                 'align' => 'center',
                 'remove_onclick' => true
             ),
-            'booking_duration' => array(
+            'duration' => array(
                 'title' => 'Durée (min)', 
                 'width' => '80',
                 'align' => 'center',
-                'remove_onclick' => true
-            ),
-            'location' => array(
-                'title' => 'Lieu', 
-                'width' => '150',
-                'remove_onclick' => true
-            ),
-            'google_account' => array(
-                'title' => 'Compte Google', 
-                'width' => '180',
                 'remove_onclick' => true
             ),
             'date_add' => array(
@@ -186,22 +176,14 @@ class AdminBookerController extends ModuleAdminController
                 ),
                 array(
                     'type' => 'textarea',
-                    'label' => 'Description (multilingue)',
+                    'label' => 'Description',
                     'name' => 'description',
                     'cols' => 60,
                     'required' => false,
-                    'lang' => true,
                     'rows' => 6,
                     'class' => 'rte',
                     'autoload_rte' => true,
                     'hint' => 'Description détaillée de l\'élément à réserver',
-                ),
-                array(
-                    'type' => 'text',
-                    'label' => 'Lieu/Emplacement',
-                    'name' => 'location',
-                    'size' => 50,
-                    'hint' => 'Localisation physique de l\'élément (port, salle, adresse...)'
                 ),
                 array(
                     'type' => 'text',
@@ -214,38 +196,30 @@ class AdminBookerController extends ModuleAdminController
                 array(
                     'type' => 'text',
                     'label' => 'Capacité maximale',
-                    'name' => 'capacity',
+                    'name' => 'max_bookings',
                     'class' => 'fixed-width-sm',
-                    'hint' => 'Nombre maximum de personnes/réservations simultanées'
+                    'hint' => 'Nombre maximum de réservations simultanées'
                 ),
                 array(
                     'type' => 'text',
                     'label' => 'Durée par défaut (minutes)',
-                    'name' => 'booking_duration',
+                    'name' => 'duration',
                     'class' => 'fixed-width-sm',
                     'suffix' => 'min',
                     'hint' => 'Durée standard d\'une réservation en minutes'
                 ),
                 array(
                     'type' => 'text',
-                    'label' => 'Délai minimum de réservation (heures)',
-                    'name' => 'min_booking_time',
+                    'label' => 'Délai annulation (heures)',
+                    'name' => 'cancellation_hours',
                     'class' => 'fixed-width-sm',
                     'suffix' => 'h',
-                    'hint' => 'Délai minimum entre la réservation et l\'utilisation'
-                ),
-                array(
-                    'type' => 'text',
-                    'label' => 'Réservation maximum à l\'avance (jours)',
-                    'name' => 'max_booking_days',
-                    'class' => 'fixed-width-sm',
-                    'suffix' => 'jours',
-                    'hint' => 'Nombre maximum de jours à l\'avance pour réserver'
+                    'hint' => 'Délai minimum avant annulation sans frais'
                 ),
                 array(
                     'type' => 'switch',
                     'label' => 'Caution requise',
-                    'name' => 'deposit_required',
+                    'name' => 'require_deposit',
                     'is_bool' => true,
                     'values' => array(
                         array('id' => 'deposit_on', 'value' => 1, 'label' => 'Oui'),
@@ -259,7 +233,7 @@ class AdminBookerController extends ModuleAdminController
                     'name' => 'deposit_amount',
                     'suffix' => '€',
                     'class' => 'fixed-width-sm',
-                    'hint' => 'Montant fixe de la caution (laisser vide pour un pourcentage du prix)'
+                    'hint' => 'Montant fixe de la caution'
                 ),
                 array(
                     'type' => 'switch',
@@ -271,14 +245,6 @@ class AdminBookerController extends ModuleAdminController
                         array('id' => 'auto_off', 'value' => 0, 'label' => 'Non')
                     ),
                     'hint' => 'Les réservations seront-elles confirmées automatiquement ?'
-                ),
-                array(
-                    'type' => 'text',
-                    'label' => 'Compte Google (email)',
-                    'name' => 'google_account',
-                    'id' => 'google_account',
-                    'size' => 50,
-                    'desc' => 'Email Google associé pour la gestion du calendrier'
                 ),
                 array(
                     'type' => 'switch',
@@ -303,7 +269,7 @@ class AdminBookerController extends ModuleAdminController
      */
     public function processSave()
     {
-        $id_booker = (int)Tools::getValue('id_booker');
+        $id_booker = (int)Tools::getValue('id');
         $id_product = (int)Tools::getValue('id_product');
         
         // Traitement standard
@@ -393,17 +359,14 @@ class AdminBookerController extends ModuleAdminController
         if (!$object->price || $object->price <= 0) {
             $object->price = Configuration::get('BOOKING_DEFAULT_PRICE', 50.00);
         }
-        if (!$object->capacity || $object->capacity <= 0) {
-            $object->capacity = 1;
+        if (!$object->max_bookings || $object->max_bookings <= 0) {
+            $object->max_bookings = 1;
         }
-        if (!$object->booking_duration || $object->booking_duration <= 0) {
-            $object->booking_duration = 60;
+        if (!$object->duration || $object->duration <= 0) {
+            $object->duration = 60;
         }
-        if (!$object->min_booking_time) {
-            $object->min_booking_time = Configuration::get('BOOKING_MIN_BOOKING_TIME', 24);
-        }
-        if (!$object->max_booking_days) {
-            $object->max_booking_days = Configuration::get('BOOKING_MAX_BOOKING_DAYS', 30);
+        if (!$object->cancellation_hours) {
+            $object->cancellation_hours = 24;
         }
         
         // Ajouter les dates de création/modification
