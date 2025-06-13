@@ -1,13 +1,22 @@
 <?php
 /**
- * Classe BookerAuthReserved - Gestion des réservations avec statuts avancés
- * Version 2.1 avec intégration commandes, paiements et statuts textuels
+ * Classe BookerAuthReserved - Gestion des réservations avec système de statuts avancé
  */
 
 class BookerAuthReserved extends ObjectModel
 {
+    // Statuts de réservation
+    const STATUS_PENDING = 0;          // En attente de validation
+    const STATUS_ACCEPTED = 1;         // Acceptée
+    const STATUS_CANCELLED = 2;        // Annulée
+    const STATUS_PAID = 3;             // Payée
+    const STATUS_EXPIRED = 4;          // Expirée
+    const STATUS_PENDING_PAYMENT = 5;  // En attente de paiement
+    const STATUS_COMPLETED = 6;        // Terminée
+    const STATUS_REFUNDED = 7;         // Remboursée
+    
     /** @var int */
-    public $id;
+    public $id_reserved;
     
     /** @var int */
     public $id_auth;
@@ -37,10 +46,16 @@ class BookerAuthReserved extends ObjectModel
     public $customer_phone;
     
     /** @var string */
-    public $date_start;
+    public $date_reserved;
     
     /** @var string */
-    public $date_end;
+    public $date_to;
+    
+    /** @var int */
+    public $hour_from;
+    
+    /** @var int */
+    public $hour_to;
     
     /** @var float */
     public $total_price;
@@ -48,8 +63,8 @@ class BookerAuthReserved extends ObjectModel
     /** @var float */
     public $deposit_paid = 0.00;
     
-    /** @var string */
-    public $status = 'pending';
+    /** @var int */
+    public $status = self::STATUS_PENDING;
     
     /** @var string */
     public $payment_status = 'pending';
@@ -67,6 +82,9 @@ class BookerAuthReserved extends ObjectModel
     public $admin_notes;
     
     /** @var string */
+    public $date_expiry;
+    
+    /** @var string */
     public $date_add;
     
     /** @var string */
@@ -77,637 +95,335 @@ class BookerAuthReserved extends ObjectModel
      */
     public static $definition = array(
         'table' => 'booker_auth_reserved',
-        'primary' => 'id',
+        'primary' => 'id_reserved',
         'fields' => array(
             'id_auth' => array('type' => self::TYPE_INT, 'validate' => 'isUnsignedId', 'required' => true),
             'id_booker' => array('type' => self::TYPE_INT, 'validate' => 'isUnsignedId', 'required' => true),
             'id_customer' => array('type' => self::TYPE_INT, 'validate' => 'isUnsignedId'),
             'id_order' => array('type' => self::TYPE_INT, 'validate' => 'isUnsignedId'),
-            'booking_reference' => array('type' => self::TYPE_STRING, 'validate' => 'isString', 'required' => true, 'size' => 50),
-            'customer_firstname' => array('type' => self::TYPE_STRING, 'validate' => 'isName', 'required' => true, 'size' => 100),
-            'customer_lastname' => array('type' => self::TYPE_STRING, 'validate' => 'isName', 'required' => true, 'size' => 100),
-            'customer_email' => array('type' => self::TYPE_STRING, 'validate' => 'isEmail', 'required' => true, 'size' => 150),
+            'booking_reference' => array('type' => self::TYPE_STRING, 'validate' => 'isString', 'size' => 50, 'required' => true),
+            'customer_firstname' => array('type' => self::TYPE_STRING, 'validate' => 'isName', 'size' => 100, 'required' => true),
+            'customer_lastname' => array('type' => self::TYPE_STRING, 'validate' => 'isName', 'size' => 100, 'required' => true),
+            'customer_email' => array('type' => self::TYPE_STRING, 'validate' => 'isEmail', 'size' => 150, 'required' => true),
             'customer_phone' => array('type' => self::TYPE_STRING, 'validate' => 'isPhoneNumber', 'size' => 50),
-            'date_start' => array('type' => self::TYPE_DATE, 'validate' => 'isDate', 'required' => true),
-            'date_end' => array('type' => self::TYPE_DATE, 'validate' => 'isDate', 'required' => true),
+            'date_reserved' => array('type' => self::TYPE_DATE, 'validate' => 'isDate', 'required' => true),
+            'date_to' => array('type' => self::TYPE_DATE, 'validate' => 'isDate'),
+            'hour_from' => array('type' => self::TYPE_INT, 'validate' => 'isUnsignedInt', 'required' => true),
+            'hour_to' => array('type' => self::TYPE_INT, 'validate' => 'isUnsignedInt', 'required' => true),
             'total_price' => array('type' => self::TYPE_FLOAT, 'validate' => 'isPrice'),
             'deposit_paid' => array('type' => self::TYPE_FLOAT, 'validate' => 'isPrice'),
-            'status' => array('type' => self::TYPE_STRING, 'validate' => 'isString', 'size' => 20),
+            'status' => array('type' => self::TYPE_INT, 'validate' => 'isUnsignedInt'),
             'payment_status' => array('type' => self::TYPE_STRING, 'validate' => 'isString', 'size' => 20),
             'stripe_payment_intent_id' => array('type' => self::TYPE_STRING, 'validate' => 'isString', 'size' => 255),
             'stripe_deposit_intent_id' => array('type' => self::TYPE_STRING, 'validate' => 'isString', 'size' => 255),
             'notes' => array('type' => self::TYPE_HTML, 'validate' => 'isCleanHtml'),
             'admin_notes' => array('type' => self::TYPE_HTML, 'validate' => 'isCleanHtml'),
+            'date_expiry' => array('type' => self::TYPE_DATE, 'validate' => 'isDate'),
             'date_add' => array('type' => self::TYPE_DATE, 'validate' => 'isDate'),
             'date_upd' => array('type' => self::TYPE_DATE, 'validate' => 'isDate')
         ),
     );
     
-    public function __construct($id = null, $id_lang = null, $id_shop = null)
-    {
-        parent::__construct($id, $id_lang, $id_shop);
-        
-        // Génération automatique de la référence si nouvelle réservation
-        if (!$this->id && !$this->booking_reference) {
-            $this->booking_reference = $this->generateBookingReference();
-        }
-    }
-    
     /**
-     * Génération d'une référence unique de réservation
-     */
-    public function generateBookingReference()
-    {
-        $prefix = 'BK';
-        $timestamp = time();
-        $random = sprintf('%04d', mt_rand(0, 9999));
-        return $prefix . date('ymd', $timestamp) . $random;
-    }
-    
-    /**
-     * Obtenir tous les statuts possibles
+     * Obtenir les statuts disponibles
      */
     public static function getStatuses()
     {
         return array(
-            'pending' => 'En attente',
-            'confirmed' => 'Confirmé',
-            'paid' => 'Payé',
-            'cancelled' => 'Annulé',
-            'completed' => 'Terminé',
-            'refunded' => 'Remboursé'
+            self::STATUS_PENDING => 'En attente',
+            self::STATUS_ACCEPTED => 'Acceptée',
+            self::STATUS_CANCELLED => 'Annulée',
+            self::STATUS_PAID => 'Payée',
+            self::STATUS_EXPIRED => 'Expirée',
+            self::STATUS_PENDING_PAYMENT => 'En attente de paiement',
+            self::STATUS_COMPLETED => 'Terminée',
+            self::STATUS_REFUNDED => 'Remboursée'
         );
     }
     
     /**
-     * Obtenir tous les statuts de paiement possibles
+     * Générer une référence unique de réservation
      */
-    public static function getPaymentStatuses()
+    public static function generateReference()
     {
-        return array(
-            'pending' => 'En attente',
-            'authorized' => 'Autorisé',
-            'captured' => 'Capturé',
-            'cancelled' => 'Annulé',
-            'refunded' => 'Remboursé'
-        );
-    }
-    
-    /**
-     * Obtenir le libellé d'un statut
-     */
-    public static function getStatusLabel($status)
-    {
-        $statuses = self::getStatuses();
-        return isset($statuses[$status]) ? $statuses[$status] : 'Inconnu';
-    }
-    
-    /**
-     * Obtenir la couleur associée à un statut
-     */
-    public static function getStatusColor($status)
-    {
-        $colors = array(
-            'pending' => '#ffc107',     // Jaune
-            'confirmed' => '#17a2b8',   // Bleu
-            'paid' => '#28a745',        // Vert
-            'cancelled' => '#dc3545',   // Rouge
-            'completed' => '#6f42c1',   // Violet
-            'refunded' => '#fd7e14'     // Orange
-        );
-        
-        return isset($colors[$status]) ? $colors[$status] : '#6c757d';
-    }
-    
-    /**
-     * Valider une réservation
-     */
-    public function validate($admin_notes = '')
-    {
-        if ($this->status !== 'pending') {
-            throw new Exception('Seules les réservations en attente peuvent être validées');
-        }
-        
-        $this->status = 'confirmed';
-        if ($admin_notes) {
-            $this->admin_notes = $admin_notes;
-        }
-        $this->date_upd = date('Y-m-d H:i:s');
-        
-        $result = $this->save();
-        
-        if ($result) {
-            // Créer automatiquement une commande si configuré
-            if (Configuration::get('BOOKING_AUTO_CREATE_ORDER')) {
-                $this->createOrder();
-            }
-            
-            // Envoyer notification
-            $this->sendValidationNotification();
-            
-            // Log de l'action
-            PrestaShopLogger::addLog(
-                'Réservation validée: ' . $this->booking_reference,
-                1,
-                null,
-                'BookerAuthReserved',
-                $this->id,
-                true
+        do {
+            $reference = 'RES-' . date('Ymd') . '-' . strtoupper(Tools::passwdGen(6, 'ALPHANUMERIC'));
+            $exists = Db::getInstance()->getValue('
+                SELECT COUNT(*) FROM `' . _DB_PREFIX_ . 'booker_auth_reserved`
+                WHERE `booking_reference` = "' . pSQL($reference) . '"'
             );
-        }
+        } while ($exists);
         
-        return $result;
+        return $reference;
     }
     
     /**
-     * Annuler une réservation
+     * Changer le statut d'une réservation
      */
-    public function cancel($admin_notes = '', $refund = false)
+    public function changeStatus($new_status)
     {
-        if (in_array($this->status, ['cancelled', 'completed'])) {
-            throw new Exception('Cette réservation ne peut pas être annulée');
-        }
-        
-        $old_status = $this->status;
-        $this->status = 'cancelled';
-        if ($admin_notes) {
-            $this->admin_notes = ($this->admin_notes ? $this->admin_notes . "\n" : '') . $admin_notes;
-        }
-        $this->date_upd = date('Y-m-d H:i:s');
-        
-        $result = $this->save();
-        
-        if ($result) {
-            // Libérer le créneau
-            $this->releaseTimeSlot();
-            
-            // Traiter le remboursement si nécessaire
-            if ($refund && $old_status === 'paid') {
-                $this->processRefund();
-            }
-            
-            // Envoyer notification
-            $this->sendCancellationNotification();
-            
-            // Log de l'action
-            PrestaShopLogger::addLog(
-                'Réservation annulée: ' . $this->booking_reference,
-                1,
-                null,
-                'BookerAuthReserved',
-                $this->id,
-                true
-            );
-        }
-        
-        return $result;
-    }
-    
-    /**
-     * Marquer comme payée
-     */
-    public function markAsPaid($payment_details = [])
-    {
-        if ($this->status !== 'confirmed') {
-            throw new Exception('Seules les réservations confirmées peuvent être marquées comme payées');
-        }
-        
-        $this->status = 'paid';
-        $this->payment_status = 'captured';
-        $this->date_upd = date('Y-m-d H:i:s');
-        
-        if (isset($payment_details['stripe_payment_intent_id'])) {
-            $this->stripe_payment_intent_id = $payment_details['stripe_payment_intent_id'];
-        }
-        
-        if (isset($payment_details['deposit_paid'])) {
-            $this->deposit_paid = (float)$payment_details['deposit_paid'];
-        }
-        
-        $result = $this->save();
-        
-        if ($result) {
-            // Envoyer notification de confirmation
-            $this->sendPaymentConfirmationNotification();
-            
-            // Log de l'action
-            PrestaShopLogger::addLog(
-                'Réservation payée: ' . $this->booking_reference,
-                1,
-                null,
-                'BookerAuthReserved',
-                $this->id,
-                true
-            );
-        }
-        
-        return $result;
-    }
-    
-    /**
-     * Créer une commande PrestaShop pour cette réservation
-     */
-    public function createOrder()
-    {
-        try {
-            // Vérifier qu'aucune commande n'existe déjà
-            if ($this->id_order) {
-                return false;
-            }
-            
-            // Récupérer les informations du booker
-            $booker = new Booker($this->id_booker);
-            if (!Validate::isLoadedObject($booker)) {
-                throw new Exception('Booker introuvable');
-            }
-            
-            // Créer ou récupérer le client
-            $customer = $this->getOrCreateCustomer();
-            
-            // Créer le panier
-            $cart = new Cart();
-            $cart->id_customer = $customer->id;
-            $cart->id_address_delivery = $customer->id_address;
-            $cart->id_address_invoice = $customer->id_address;
-            $cart->id_lang = (int)Configuration::get('PS_LANG_DEFAULT');
-            $cart->id_currency = (int)Configuration::get('PS_CURRENCY_DEFAULT');
-            $cart->id_carrier = (int)Configuration::get('PS_CARRIER_DEFAULT');
-            $cart->save();
-            
-            // Ajouter le produit au panier si le booker a un produit associé
-            if ($booker->id_product) {
-                $cart->updateQty(1, $booker->id_product);
-            }
-            
-            // Créer la commande
-            $order_status = Configuration::get('BOOKING_ORDER_STATUS') ?: Configuration::get('PS_OS_PREPARATION');
-            
-            $payment_module = Module::getInstanceByName('bankwire'); // Module de paiement par défaut
-            if (!$payment_module) {
-                $payment_module = new PaymentModule();
-            }
-            
-            $order_total = $this->total_price ?: $booker->price;
-            
-            $payment_module->validateOrder(
-                $cart->id,
-                $order_status,
-                $order_total,
-                'Réservation - ' . $booker->name,
-                'Réservation ' . $this->booking_reference . ' du ' . date('d/m/Y', strtotime($this->date_start)),
-                [],
-                null,
-                false,
-                $customer->secure_key
-            );
-            
-            // Récupérer l'ID de la commande créée
-            $this->id_order = $payment_module->currentOrder;
-            $this->save();
-            
-            return true;
-            
-        } catch (Exception $e) {
-            PrestaShopLogger::addLog(
-                'Erreur création commande pour réservation ' . $this->booking_reference . ': ' . $e->getMessage(),
-                3,
-                null,
-                'BookerAuthReserved',
-                $this->id,
-                true
-            );
+        // Vérifier si le changement de statut est valide
+        if (!$this->isStatusChangeValid($this->status, $new_status)) {
             return false;
         }
+        
+        $this->status = $new_status;
+        $this->date_upd = date('Y-m-d H:i:s');
+        
+        // Actions spécifiques selon le statut
+        switch ($new_status) {
+            case self::STATUS_ACCEPTED:
+                // Vérifier les conflits
+                if ($this->hasConflict()) {
+                    return false;
+                }
+                break;
+                
+            case self::STATUS_CANCELLED:
+            case self::STATUS_EXPIRED:
+                // Libérer le créneau
+                $this->freeSlot();
+                break;
+                
+            case self::STATUS_PENDING_PAYMENT:
+                // Créer une commande PrestaShop
+                if (!$this->id_order) {
+                    $this->createPendingOrder();
+                }
+                break;
+        }
+        
+        return $this->save();
     }
     
     /**
-     * Obtenir une réservation par ID de commande
+     * Vérifier si un changement de statut est valide
      */
-    public static function getByOrderId($order_id)
+    private function isStatusChangeValid($old_status, $new_status)
     {
-        $sql = 'SELECT id FROM `' . _DB_PREFIX_ . 'booker_auth_reserved`
-                WHERE id_order = ' . (int)$order_id;
+        // Définir les transitions valides
+        $valid_transitions = array(
+            self::STATUS_PENDING => array(
+                self::STATUS_ACCEPTED,
+                self::STATUS_CANCELLED,
+                self::STATUS_EXPIRED
+            ),
+            self::STATUS_ACCEPTED => array(
+                self::STATUS_PENDING_PAYMENT,
+                self::STATUS_PAID,
+                self::STATUS_CANCELLED
+            ),
+            self::STATUS_PENDING_PAYMENT => array(
+                self::STATUS_PAID,
+                self::STATUS_CANCELLED,
+                self::STATUS_EXPIRED
+            ),
+            self::STATUS_PAID => array(
+                self::STATUS_COMPLETED,
+                self::STATUS_REFUNDED
+            ),
+            self::STATUS_CANCELLED => array(),
+            self::STATUS_EXPIRED => array(),
+            self::STATUS_COMPLETED => array(
+                self::STATUS_REFUNDED
+            ),
+            self::STATUS_REFUNDED => array()
+        );
         
-        $reservation_id = Db::getInstance()->getValue($sql);
+        return isset($valid_transitions[$old_status]) && 
+               in_array($new_status, $valid_transitions[$old_status]);
+    }
+    
+    /**
+     * Vérifier s'il y a un conflit avec d'autres réservations
+     */
+    public function hasConflict()
+    {
+        $sql = 'SELECT COUNT(*) FROM `' . _DB_PREFIX_ . 'booker_auth_reserved`
+                WHERE `id_booker` = ' . (int)$this->id_booker . '
+                AND `id_reserved` != ' . (int)$this->id . '
+                AND `status` IN (' . self::STATUS_ACCEPTED . ', ' . self::STATUS_PAID . ', ' . self::STATUS_PENDING_PAYMENT . ')
+                AND (
+                    (`date_reserved` <= "' . pSQL($this->date_reserved) . '" AND `date_to` >= "' . pSQL($this->date_reserved) . '")
+                    OR (`date_reserved` <= "' . pSQL($this->date_to) . '" AND `date_to` >= "' . pSQL($this->date_to) . '")
+                    OR (`date_reserved` >= "' . pSQL($this->date_reserved) . '" AND `date_to` <= "' . pSQL($this->date_to) . '")
+                )
+                AND (
+                    (`hour_from` < ' . (int)$this->hour_to . ' AND `hour_to` > ' . (int)$this->hour_from . ')
+                )';
         
-        if ($reservation_id) {
-            return new self($reservation_id);
+        return (bool)Db::getInstance()->getValue($sql);
+    }
+    
+    /**
+     * Libérer le créneau réservé
+     */
+    private function freeSlot()
+    {
+        if ($this->id_auth) {
+            $sql = 'UPDATE `' . _DB_PREFIX_ . 'booker_auth`
+                    SET `current_bookings` = GREATEST(0, `current_bookings` - 1)
+                    WHERE `id_auth` = ' . (int)$this->id_auth;
+            
+            return Db::getInstance()->execute($sql);
+        }
+        return true;
+    }
+    
+    /**
+     * Créer une commande PrestaShop en attente de paiement
+     */
+    public function createPendingOrder()
+    {
+        // Vérifier qu'une commande n'existe pas déjà
+        if ($this->id_order) {
+            return $this->id_order;
+        }
+        
+        // Récupérer ou créer le client
+        $id_customer = $this->getOrCreateCustomer();
+        if (!$id_customer) {
+            return false;
+        }
+        
+        // Récupérer le booker et son produit associé
+        $booker = new Booker($this->id_booker);
+        if (!Validate::isLoadedObject($booker) || !$booker->id_product) {
+            return false;
+        }
+        
+        // Créer le panier
+        $cart = new Cart();
+        $cart->id_customer = $id_customer;
+        $cart->id_currency = Configuration::get('PS_CURRENCY_DEFAULT');
+        $cart->id_lang = Configuration::get('PS_LANG_DEFAULT');
+        $cart->id_address_delivery = $this->getCustomerAddress($id_customer);
+        $cart->id_address_invoice = $cart->id_address_delivery;
+        $cart->add();
+        
+        // Ajouter le produit au panier
+        $cart->updateQty(1, $booker->id_product);
+        
+        // Créer la commande
+        $payment_module = Module::getInstanceByName('booking');
+        $order_status = Configuration::get('BOOKING_STATUS_PENDING_PAYMENT', 
+                                         Configuration::get('PS_OS_BANKWIRE'));
+        
+        $cart->getDeliveryOptionList();
+        $payment_module->validateOrder(
+            $cart->id,
+            $order_status,
+            $this->total_price,
+            'Réservation - ' . $this->booking_reference,
+            'Réservation créée depuis le back-office',
+            array(),
+            null,
+            false,
+            $cart->secure_key
+        );
+        
+        $this->id_order = $payment_module->currentOrder;
+        $this->id_customer = $id_customer;
+        $this->status = self::STATUS_PENDING_PAYMENT;
+        $this->save();
+        
+        return $this->id_order;
+    }
+    
+    /**
+     * Récupérer ou créer un client PrestaShop
+     */
+    private function getOrCreateCustomer()
+    {
+        // Si déjà lié à un client
+        if ($this->id_customer) {
+            return $this->id_customer;
+        }
+        
+        // Chercher un client existant par email
+        $id_customer = Customer::customerExists($this->customer_email, true);
+        if ($id_customer) {
+            return $id_customer;
+        }
+        
+        // Créer un nouveau client
+        $customer = new Customer();
+        $customer->firstname = $this->customer_firstname;
+        $customer->lastname = $this->customer_lastname;
+        $customer->email = $this->customer_email;
+        $customer->passwd = Tools::encrypt(Tools::passwdGen(8));
+        $customer->newsletter = false;
+        $customer->optin = false;
+        $customer->active = true;
+        
+        if ($customer->add()) {
+            return $customer->id;
         }
         
         return false;
     }
     
     /**
-     * Mettre à jour le statut en fonction du statut de commande
+     * Obtenir l'adresse du client (créer si nécessaire)
      */
-    public function updateStatusFromOrder($order_status)
+    private function getCustomerAddress($id_customer)
     {
-        $booking_status_map = [
-            Configuration::get('PS_OS_PREPARATION') => 'confirmed',
-            Configuration::get('PS_OS_PAYMENT') => 'paid',
-            Configuration::get('PS_OS_DELIVERED') => 'completed',
-            Configuration::get('PS_OS_CANCELED') => 'cancelled',
-            Configuration::get('PS_OS_REFUND') => 'refunded'
-        ];
-        
-        if (isset($booking_status_map[$order_status->id])) {
-            $this->status = $booking_status_map[$order_status->id];
-            $this->date_upd = date('Y-m-d H:i:s');
-            $this->save();
-        }
-    }
-    
-    /**
-     * Confirmer le paiement
-     */
-    public function confirmPayment()
-    {
-        if ($this->status === 'confirmed') {
-            $this->status = 'paid';
-            $this->payment_status = 'captured';
-            $this->date_upd = date('Y-m-d H:i:s');
-            $this->save();
-            
-            // Envoyer notification
-            $this->sendPaymentConfirmationNotification();
-        }
-    }
-    
-    /**
-     * Obtenir ou créer un client pour cette réservation
-     */
-    private function getOrCreateCustomer()
-    {
-        // Si un client est déjà associé
-        if ($this->id_customer) {
-            $customer = new Customer($this->id_customer);
-            if (Validate::isLoadedObject($customer)) {
-                return $customer;
-            }
+        $addresses = Customer::getAddressesTotalById($id_customer);
+        if ($addresses > 0) {
+            $address = Address::getFirstCustomerAddressId($id_customer);
+            return $address;
         }
         
-        // Chercher un client existant par email
-        $id_customer = Customer::customerExists($this->customer_email, true);
-        if ($id_customer) {
-            $customer = new Customer($id_customer);
-            $this->id_customer = $id_customer;
-            $this->save();
-            return $customer;
-        }
-        
-        // Créer nouveau client
-        $customer = new Customer();
-        $customer->firstname = $this->customer_firstname;
-        $customer->lastname = $this->customer_lastname;
-        $customer->email = $this->customer_email;
-        $customer->passwd = Tools::encrypt(Tools::passwdGen());
-        $customer->id_default_group = (int)Configuration::get('PS_CUSTOMER_GROUP');
-        $customer->add();
-        
-        // Créer adresse par défaut
+        // Créer une adresse par défaut
         $address = new Address();
-        $address->id_customer = $customer->id;
+        $address->id_customer = $id_customer;
+        $address->alias = 'Réservation';
         $address->firstname = $this->customer_firstname;
         $address->lastname = $this->customer_lastname;
-        $address->phone = $this->customer_phone;
-        $address->id_country = (int)Configuration::get('PS_COUNTRY_DEFAULT');
-        $address->alias = 'Réservation';
-        $address->city = 'Non spécifié';
-        $address->postcode = '00000';
         $address->address1 = 'Adresse de réservation';
-        $address->add();
+        $address->city = 'Non spécifiée';
+        $address->id_country = Configuration::get('PS_COUNTRY_DEFAULT');
+        $address->phone = $this->customer_phone ?: '0000000000';
         
-        $customer->id_address = $address->id;
-        $customer->save();
-        
-        $this->id_customer = $customer->id;
-        $this->save();
-        
-        return $customer;
-    }
-    
-    /**
-     * Libérer le créneau de disponibilité
-     */
-    private function releaseTimeSlot()
-    {
-        $auth = new BookerAuth($this->id_auth);
-        if (Validate::isLoadedObject($auth) && $auth->current_bookings > 0) {
-            $auth->current_bookings--;
-            $auth->save();
-        }
-    }
-    
-    /**
-     * Traiter un remboursement
-     */
-    private function processRefund()
-    {
-        // À implémenter selon le module de paiement utilisé
-        // Intégration avec Stripe, PayPal, etc.
-        
-        if ($this->stripe_payment_intent_id && Configuration::get('BOOKING_STRIPE_ENABLED')) {
-            // Traitement remboursement Stripe
-            $this->processStripeRefund();
+        if ($address->add()) {
+            return $address->id;
         }
         
-        $this->status = 'refunded';
-        $this->payment_status = 'refunded';
-        $this->save();
+        return false;
     }
     
     /**
-     * Traitement remboursement Stripe
+     * Annuler les réservations expirées
      */
-    private function processStripeRefund()
+    public static function cancelExpiredReservations()
     {
-        // À implémenter avec l'API Stripe
-        // Exemple de structure:
-        /*
-        try {
-            \Stripe\Stripe::setApiKey(Configuration::get('STRIPE_SECRET_KEY'));
-            
-            $refund = \Stripe\Refund::create([
-                'payment_intent' => $this->stripe_payment_intent_id,
-                'amount' => $this->deposit_paid * 100, // Stripe utilise les centimes
-                'reason' => 'requested_by_customer'
-            ]);
-            
-            return $refund->status === 'succeeded';
-        } catch (Exception $e) {
-            PrestaShopLogger::addLog('Erreur remboursement Stripe: ' . $e->getMessage(), 3);
-            return false;
-        }
-        */
+        $sql = 'UPDATE `' . _DB_PREFIX_ . 'booker_auth_reserved`
+                SET `status` = ' . self::STATUS_EXPIRED . ',
+                    `date_upd` = "' . date('Y-m-d H:i:s') . '"
+                WHERE `status` = ' . self::STATUS_PENDING . '
+                AND `date_expiry` IS NOT NULL
+                AND `date_expiry` < NOW()';
+        
+        return Db::getInstance()->execute($sql);
     }
     
     /**
-     * Nettoyer les réservations expirées
+     * Sauvegarder avec mise à jour des timestamps
      */
-    public static function cancelExpiredReservations($expiry_hours = 24)
+    public function save($null_values = false, $auto_date = true)
     {
-        $expiry_date = date('Y-m-d H:i:s', strtotime('-' . (int)$expiry_hours . ' hours'));
-        
-        $sql = 'SELECT id FROM `' . _DB_PREFIX_ . 'booker_auth_reserved`
-                WHERE status = "pending"
-                AND date_add < "' . pSQL($expiry_date) . '"';
-                
-        $expired_ids = Db::getInstance()->executeS($sql);
-        $count = 0;
-        
-        foreach ($expired_ids as $row) {
-            $reservation = new self($row['id']);
-            if (Validate::isLoadedObject($reservation)) {
-                $reservation->status = 'cancelled';
-                $reservation->admin_notes = 'Annulation automatique - Réservation expirée';
-                $reservation->date_upd = date('Y-m-d H:i:s');
-                if ($reservation->save()) {
-                    $reservation->releaseTimeSlot();
-                    $count++;
-                }
+        if ($auto_date) {
+            if (!$this->id) {
+                $this->date_add = date('Y-m-d H:i:s');
             }
+            $this->date_upd = date('Y-m-d H:i:s');
         }
         
-        return $count;
-    }
-    
-    /**
-     * Obtenir les réservations par statut
-     */
-    public static function getReservationsByStatus($status, $limit = null)
-    {
-        $sql = 'SELECT * FROM `' . _DB_PREFIX_ . 'booker_auth_reserved`
-                WHERE status = "' . pSQL($status) . '"
-                ORDER BY date_add DESC';
-                
-        if ($limit) {
-            $sql .= ' LIMIT ' . (int)$limit;
+        // Générer une référence si nécessaire
+        if (empty($this->booking_reference)) {
+            $this->booking_reference = self::generateReference();
         }
         
-        return Db::getInstance()->executeS($sql);
-    }
-    
-    /**
-     * Obtenir les statistiques des réservations
-     */
-    public static function getStats($date_from = null, $date_to = null)
-    {
-        $date_condition = '';
-        if ($date_from && $date_to) {
-            $date_condition = ' AND date_add BETWEEN "' . pSQL($date_from) . '" AND "' . pSQL($date_to) . '"';
-        }
-        
-        $stats = [];
-        $statuses = self::getStatuses();
-        
-        foreach ($statuses as $status_id => $status_label) {
-            $count = Db::getInstance()->getValue('
-                SELECT COUNT(*) FROM `' . _DB_PREFIX_ . 'booker_auth_reserved`
-                WHERE status = "' . pSQL($status_id) . '"' . $date_condition
-            );
-            $stats[$status_id] = [
-                'label' => $status_label,
-                'count' => (int)$count
-            ];
-        }
-        
-        // Ajouter le chiffre d'affaires
-        $revenue = Db::getInstance()->getValue('
-            SELECT SUM(total_price) FROM `' . _DB_PREFIX_ . 'booker_auth_reserved`
-            WHERE status IN ("paid", "completed")' . $date_condition
-        );
-        
-        $stats['revenue'] = (float)$revenue ?: 0;
-        
-        return $stats;
-    }
-    
-    /**
-     * Obtenir les réservations d'aujourd'hui
-     */
-    public static function getTodayReservations()
-    {
-        $today = date('Y-m-d');
-        
-        $sql = 'SELECT bar.*, b.name as booker_name
-                FROM `' . _DB_PREFIX_ . 'booker_auth_reserved` bar
-                LEFT JOIN `' . _DB_PREFIX_ . 'booker` b ON b.id = bar.id_booker
-                WHERE DATE(bar.date_start) = "' . pSQL($today) . '"
-                AND bar.status IN ("confirmed", "paid")
-                ORDER BY bar.date_start ASC';
-        
-        return Db::getInstance()->executeS($sql);
-    }
-    
-    /**
-     * Obtenir les réservations à venir
-     */
-    public static function getUpcomingReservations($days = 7)
-    {
-        $date_from = date('Y-m-d H:i:s');
-        $date_to = date('Y-m-d H:i:s', strtotime('+' . (int)$days . ' days'));
-        
-        $sql = 'SELECT bar.*, b.name as booker_name
-                FROM `' . _DB_PREFIX_ . 'booker_auth_reserved` bar
-                LEFT JOIN `' . _DB_PREFIX_ . 'booker` b ON b.id = bar.id_booker
-                WHERE bar.date_start BETWEEN "' . pSQL($date_from) . '" AND "' . pSQL($date_to) . '"
-                AND bar.status IN ("confirmed", "paid")
-                ORDER BY bar.date_start ASC';
-        
-        return Db::getInstance()->executeS($sql);
-    }
-    
-    /**
-     * Vérifier si une période est disponible
-     */
-    public static function isTimeSlotAvailable($id_booker, $date_start, $date_end, $exclude_reservation_id = null)
-    {
-        $sql = 'SELECT COUNT(*) FROM `' . _DB_PREFIX_ . 'booker_auth_reserved`
-                WHERE id_booker = ' . (int)$id_booker . '
-                AND status NOT IN ("cancelled")
-                AND (
-                    (date_start <= "' . pSQL($date_start) . '" AND date_end > "' . pSQL($date_start) . '")
-                    OR (date_start < "' . pSQL($date_end) . '" AND date_end >= "' . pSQL($date_end) . '")
-                    OR (date_start >= "' . pSQL($date_start) . '" AND date_end <= "' . pSQL($date_end) . '")
-                )';
-        
-        if ($exclude_reservation_id) {
-            $sql .= ' AND id != ' . (int)$exclude_reservation_id;
-        }
-        
-        $count = Db::getInstance()->getValue($sql);
-        
-        return $count == 0;
-    }
-    
-    // Méthodes de notification (à implémenter selon les besoins)
-    private function sendValidationNotification() 
-    {
-        if (!Configuration::get('BOOKING_NOTIFICATIONS_ENABLED')) {
-            return false;
-        }
-        
-        // À implémenter avec Mail::Send()
-        // Exemple de structure pour notification de validation
-    }
-    
-    private function sendCancellationNotification() 
-    {
-        if (!Configuration::get('BOOKING_NOTIFICATIONS_ENABLED')) {
-            return false;
-        }
-        
-        // À implémenter avec Mail::Send()
-        // Exemple de structure pour notification d'annulation
-    }
-    
-    private function sendPaymentConfirmationNotification() 
-    {
-        if (!Configuration::get('BOOKING_NOTIFICATIONS_ENABLED')) {
-            return false;
-        }
-        
-        // À implémenter avec Mail::Send()
-        // Exemple de structure pour notification de confirmation de paiement
+        return parent::save($null_values, $auto_date);
     }
 }

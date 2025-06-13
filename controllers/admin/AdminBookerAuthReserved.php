@@ -78,14 +78,6 @@ class AdminBookerAuthReservedController extends ModuleAdminController
                 'type' => 'datetime',
                 'remove_onclick' => true
             ),			
-            'active' => array(
-                'title' => 'Actif', 
-                'align' => 'center', 
-                'active' => 'status', 
-                'type' => 'bool', 
-                'orderby' => false,
-                'remove_onclick' => true
-            ),
         );
         
         $this->bulk_actions = array(
@@ -94,14 +86,6 @@ class AdminBookerAuthReservedController extends ModuleAdminController
                 'confirm' => 'Supprimer les éléments sélectionnés ?',
                 'icon' => 'icon-trash'
             ),
-            'enable' => array(
-                'text' => 'Activer sélectionnés',
-                'icon' => 'icon-power-off'
-            ),
-            'disable' => array(
-                'text' => 'Désactiver sélectionnés',
-                'icon' => 'icon-power-off'
-            ),
             'accept' => array(
                 'text' => 'Accepter les réservations',
                 'icon' => 'icon-check'
@@ -109,6 +93,10 @@ class AdminBookerAuthReservedController extends ModuleAdminController
             'cancel' => array(
                 'text' => 'Annuler les réservations',
                 'icon' => 'icon-remove'
+            ),
+            'createOrder' => array(
+                'text' => 'Créer commandes en attente',
+                'icon' => 'icon-shopping-cart'
             )
         );
         
@@ -145,6 +133,9 @@ class AdminBookerAuthReservedController extends ModuleAdminController
             case BookerAuthReserved::STATUS_EXPIRED:
                 $class = 'label-danger';
                 break;
+            case BookerAuthReserved::STATUS_PENDING_PAYMENT:
+                $class = 'label-primary';
+                break;
         }
         
         return '<span class="label ' . $class . '">' . $label . '</span>';
@@ -161,6 +152,33 @@ class AdminBookerAuthReservedController extends ModuleAdminController
     public function processBulkCancel()
     {
         $this->processBulkStatusChange(BookerAuthReserved::STATUS_CANCELLED, 'Réservation(s) annulée(s)');
+    }
+    
+    public function processBulkCreateOrder()
+    {
+        $errors = 0;
+        $success = 0;
+        
+        if (is_array($this->boxes) && !empty($this->boxes)) {
+            foreach ($this->boxes as $id) {
+                $reservation = new BookerAuthReserved((int)$id);
+                if (Validate::isLoadedObject($reservation)) {
+                    // Créer une commande en attente de paiement
+                    if ($reservation->createPendingOrder()) {
+                        $success++;
+                    } else {
+                        $errors++;
+                    }
+                }
+            }
+        }
+        
+        if ($success > 0) {
+            $this->confirmations[] = $success . ' commande(s) créée(s) en attente de paiement';
+        }
+        if ($errors > 0) {
+            $this->errors[] = $errors . ' erreur(s) lors de la création des commandes';
+        }
     }
     
     private function processBulkStatusChange($new_status, $success_message)
@@ -198,7 +216,6 @@ class AdminBookerAuthReservedController extends ModuleAdminController
         $bookers = Db::getInstance()->executeS('
             SELECT b.id_booker, b.name
             FROM `' . _DB_PREFIX_ . 'booker` b
-            LEFT JOIN `' . _DB_PREFIX_ . 'booker_lang` bl ON (b.id_booker = bl.id_booker AND bl.id_lang = ' . (int)$this->context->language->id . ')
             WHERE b.active = 1
             ORDER BY b.name
         ');
@@ -228,6 +245,38 @@ class AdminBookerAuthReservedController extends ModuleAdminController
                         'id' => 'id_booker',
                         'name' => 'name'
                     )
+                ),
+                array(
+                    'type' => 'text',
+                    'label' => 'Référence de réservation',
+                    'name' => 'booking_reference',
+                    'id' => 'booking_reference',
+                    'required' => false,
+                    'desc' => 'Laisser vide pour générer automatiquement'
+                ),
+                array(
+                    'type' => 'text',
+                    'label' => 'Prénom client',
+                    'name' => 'customer_firstname',
+                    'required' => true,
+                ),
+                array(
+                    'type' => 'text',
+                    'label' => 'Nom client',
+                    'name' => 'customer_lastname',
+                    'required' => true,
+                ),
+                array(
+                    'type' => 'text',
+                    'label' => 'Email client',
+                    'name' => 'customer_email',
+                    'required' => true,
+                ),
+                array(
+                    'type' => 'text',
+                    'label' => 'Téléphone client',
+                    'name' => 'customer_phone',
+                    'required' => false,
                 ),
                 array(
                     'type' => 'date',
@@ -268,6 +317,13 @@ class AdminBookerAuthReservedController extends ModuleAdminController
                     )
                 ),
                 array(
+                    'type' => 'text',
+                    'label' => 'Prix total',
+                    'name' => 'total_price',
+                    'suffix' => '€',
+                    'class' => 'fixed-width-sm',
+                ),
+                array(
                     'type' => 'select',
                     'label' => 'Statut',
                     'name' => 'status',
@@ -281,24 +337,17 @@ class AdminBookerAuthReservedController extends ModuleAdminController
                     'desc' => 'Attention : changer vers "Accepté" ou "Payé" vérifiera les conflits'
                 ),
                 array(
-                    'type' => 'switch',
-                    'label' => 'Actif',
-                    'name' => 'active',
-                    'required' => false,
-                    'is_bool' => true,
-                    'values' => array(
-                        array(
-                            'id' => 'active_on',
-                            'value' => 1,
-                            'label' => 'Oui'
-                        ), 
-                        array(
-                            'id' => 'active_off',
-                            'value' => 0,
-                            'label' => 'Non'
-                        )
-                    ),
-                )
+                    'type' => 'textarea',
+                    'label' => 'Notes client',
+                    'name' => 'notes',
+                    'rows' => 3,
+                ),
+                array(
+                    'type' => 'textarea',
+                    'label' => 'Notes admin',
+                    'name' => 'admin_notes',
+                    'rows' => 3,
+                ),
             ),
             'submit' => array('title' => 'Sauvegarder'),			
         );
@@ -344,9 +393,20 @@ class AdminBookerAuthReservedController extends ModuleAdminController
         $object = new $this->className();
         $this->copyFromPost($object, $this->table);
         
+        // Générer une référence si nécessaire
+        if (empty($object->booking_reference)) {
+            $object->booking_reference = BookerAuthReserved::generateReference();
+        }
+        
         // Ajouter les dates de création/modification
         $object->date_add = date('Y-m-d H:i:s');
         $object->date_upd = date('Y-m-d H:i:s');
+        
+        // Définir la date d'expiration
+        if ($object->status == BookerAuthReserved::STATUS_PENDING) {
+            $expiry_hours = Configuration::get('BOOKING_EXPIRY_HOURS', 24);
+            $object->date_expiry = date('Y-m-d H:i:s', strtotime('+' . $expiry_hours . ' hours'));
+        }
         
         // Vérifier les conflits avant sauvegarde
         if (!$this->validateReservation($object)) {
@@ -372,8 +432,16 @@ class AdminBookerAuthReservedController extends ModuleAdminController
             return false;
         }
         
+        $old_status = $object->status;
+        
         $this->copyFromPost($object, $this->table);
         $object->date_upd = date('Y-m-d H:i:s');
+        
+        // Si le statut change vers pending, définir une nouvelle date d'expiration
+        if ($old_status != BookerAuthReserved::STATUS_PENDING && $object->status == BookerAuthReserved::STATUS_PENDING) {
+            $expiry_hours = Configuration::get('BOOKING_EXPIRY_HOURS', 24);
+            $object->date_expiry = date('Y-m-d H:i:s', strtotime('+' . $expiry_hours . ' hours'));
+        }
         
         // Vérifier les conflits avant sauvegarde
         if (!$this->validateReservation($object)) {
@@ -478,9 +546,8 @@ class AdminBookerAuthReservedController extends ModuleAdminController
             $count = Db::getInstance()->getValue('
                 SELECT COUNT(*) 
                 FROM `' . _DB_PREFIX_ . 'booker_auth_reserved` 
-                WHERE `status` = ' . (int)$status_id . ' 
-                AND `active` = 1
-            ');
+                WHERE `status` = ' . (int)$status_id
+            );
             $stats[] = array(
                 'label' => $status_label,
                 'count' => (int)$count,
