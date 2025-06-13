@@ -5,7 +5,7 @@ class AdminBookerAuthReservedController extends ModuleAdminController
 {
     protected $_module = NULL;
     public $controller_type='admin';   
-    protected $position_identifier = 'id_reserved';
+    protected $position_identifier = 'id';
 
     public function __construct()
     {
@@ -13,52 +13,61 @@ class AdminBookerAuthReservedController extends ModuleAdminController
         $this->context = Context::getContext();
         $this->bootstrap = true;
         $this->table = 'booker_auth_reserved';
-        $this->identifier = 'id_reserved';
+        $this->identifier = 'id';
         $this->className = 'BookerAuthReserved';
-        $this->_defaultOrderBy = 'date_reserved';
+        $this->_defaultOrderBy = 'date_start';
         $this->_defaultOrderWay = 'DESC';
         $this->allow_export = true;
         
         $this->fields_list = array(
-            'id_reserved' => array(
+            'id' => array(
                 'title' => 'ID', 
-                'filter_key' => 'a!id_reserved', 
+                'filter_key' => 'a!id', 
                 'align' => 'center',
                 'class' => 'fixed-width-xs',
                 'remove_onclick' => true
             ),       
-            'id_booker' => array(
-                'title' => 'Booker', 
-                'filter_key' => 'a!id_booker', 
+            'booking_reference' => array(
+                'title' => 'Référence', 
+                'filter_key' => 'a!booking_reference', 
                 'align' => 'center',
+                'remove_onclick' => true
+            ),
+            'customer_firstname' => array(
+                'title' => 'Prénom', 
+                'filter_key' => 'a!customer_firstname', 
+                'remove_onclick' => true
+            ),
+            'customer_lastname' => array(
+                'title' => 'Nom', 
+                'filter_key' => 'a!customer_lastname', 
+                'remove_onclick' => true
+            ),
+            'customer_email' => array(
+                'title' => 'Email', 
+                'filter_key' => 'a!customer_email', 
                 'remove_onclick' => true
             ),           
-            'date_reserved' => array(
+            'date_start' => array(
                 'title' => 'Date début', 
-                'filter_key' => 'a!date_reserved', 
+                'filter_key' => 'a!date_start', 
                 'align' => 'center',
-                'type' => 'date',
+                'type' => 'datetime',
                 'remove_onclick' => true
             ),
-            'date_to' => array(
+            'date_end' => array(
                 'title' => 'Date fin', 
-                'filter_key' => 'a!date_to', 
+                'filter_key' => 'a!date_end', 
                 'align' => 'center',
-                'type' => 'date',
+                'type' => 'datetime',
                 'remove_onclick' => true
             ),
-            'hour_from' => array(
-                'title' => 'Heure début', 
-                'filter_key' => 'a!hour_from', 
+            'total_price' => array(
+                'title' => 'Prix total', 
+                'filter_key' => 'a!total_price', 
                 'align' => 'center',
-                'suffix' => 'h',
-                'remove_onclick' => true
-            ),
-            'hour_to' => array(
-                'title' => 'Heure fin', 
-                'filter_key' => 'a!hour_to', 
-                'align' => 'center',
-                'suffix' => 'h',
+                'suffix' => ' €',
+                'type' => 'price',
                 'remove_onclick' => true
             ),
             'status' => array(
@@ -67,7 +76,7 @@ class AdminBookerAuthReservedController extends ModuleAdminController
                 'align' => 'center',
                 'type' => 'select',
                 'list' => BookerAuthReserved::getStatuses(),
-                'filter_type' => 'int',
+                'filter_type' => 'string',
                 'callback' => 'displayStatus',
                 'remove_onclick' => true
             ),
@@ -77,14 +86,6 @@ class AdminBookerAuthReservedController extends ModuleAdminController
                 'align' => 'center',
                 'type' => 'datetime',
                 'remove_onclick' => true
-            ),			
-            'active' => array(
-                'title' => 'Actif', 
-                'align' => 'center', 
-                'active' => 'status', 
-                'type' => 'bool', 
-                'orderby' => false,
-                'remove_onclick' => true
             ),
         );
         
@@ -93,14 +94,6 @@ class AdminBookerAuthReservedController extends ModuleAdminController
                 'text' => 'Supprimer sélectionnés',
                 'confirm' => 'Supprimer les éléments sélectionnés ?',
                 'icon' => 'icon-trash'
-            ),
-            'enable' => array(
-                'text' => 'Activer sélectionnés',
-                'icon' => 'icon-power-off'
-            ),
-            'disable' => array(
-                'text' => 'Désactiver sélectionnés',
-                'icon' => 'icon-power-off'
             ),
             'accept' => array(
                 'text' => 'Accepter les réservations',
@@ -131,18 +124,19 @@ class AdminBookerAuthReservedController extends ModuleAdminController
         $label = isset($status_labels[$value]) ? $status_labels[$value] : 'Inconnu';
         
         $class = '';
-        switch ((int)$value) {
-            case BookerAuthReserved::STATUS_PENDING:
+        switch ($value) {
+            case 'pending':
                 $class = 'label-warning';
                 break;
-            case BookerAuthReserved::STATUS_ACCEPTED:
+            case 'confirmed':
                 $class = 'label-info';
                 break;
-            case BookerAuthReserved::STATUS_PAID:
+            case 'paid':
+            case 'completed':
                 $class = 'label-success';
                 break;
-            case BookerAuthReserved::STATUS_CANCELLED:
-            case BookerAuthReserved::STATUS_EXPIRED:
+            case 'cancelled':
+            case 'refunded':
                 $class = 'label-danger';
                 break;
         }
@@ -155,12 +149,12 @@ class AdminBookerAuthReservedController extends ModuleAdminController
      */
     public function processBulkAccept()
     {
-        $this->processBulkStatusChange(BookerAuthReserved::STATUS_ACCEPTED, 'Réservation(s) acceptée(s)');
+        $this->processBulkStatusChange('confirmed', 'Réservation(s) acceptée(s)');
     }
     
     public function processBulkCancel()
     {
-        $this->processBulkStatusChange(BookerAuthReserved::STATUS_CANCELLED, 'Réservation(s) annulée(s)');
+        $this->processBulkStatusChange('cancelled', 'Réservation(s) annulée(s)');
     }
     
     private function processBulkStatusChange($new_status, $success_message)
@@ -196,9 +190,8 @@ class AdminBookerAuthReservedController extends ModuleAdminController
         
         // Récupérer les bookers disponibles
         $bookers = Db::getInstance()->executeS('
-            SELECT b.id_booker, b.name
+            SELECT b.id, b.name
             FROM `' . _DB_PREFIX_ . 'booker` b
-            LEFT JOIN `' . _DB_PREFIX_ . 'booker_lang` bl ON (b.id_booker = bl.id_booker AND bl.id_lang = ' . (int)$this->context->language->id . ')
             WHERE b.active = 1
             ORDER BY b.name
         ');
@@ -206,8 +199,8 @@ class AdminBookerAuthReservedController extends ModuleAdminController
         $booker_options = array();
         foreach ($bookers as $booker) {
             $booker_options[] = array(
-                'id_booker' => $booker['id_booker'],
-                'name' => $booker['name'] ? $booker['name'] : 'Booker #' . $booker['id_booker']
+                'id_booker' => $booker['id'],
+                'name' => $booker['name'] ? $booker['name'] : 'Booker #' . $booker['id']
             );
         }
         
@@ -230,42 +223,60 @@ class AdminBookerAuthReservedController extends ModuleAdminController
                     )
                 ),
                 array(
-                    'type' => 'date',
-                    'label' => 'Date de début',
-                    'name' => 'date_reserved',
-                    'id' => 'date_reserved', 
+                    'type' => 'text',
+                    'label' => 'Référence de réservation',
+                    'name' => 'booking_reference',
+                    'required' => true,
+                    'hint' => 'Référence unique de la réservation'
+                ),
+                array(
+                    'type' => 'text',
+                    'label' => 'Prénom du client',
+                    'name' => 'customer_firstname',
                     'required' => true,
                 ),
                 array(
-                    'type' => 'date',
-                    'label' => 'Date de fin (optionnel)',
-                    'name' => 'date_to',
-                    'id' => 'date_to',
-                    'desc' => 'Laissez vide pour une réservation d\'une seule journée'
+                    'type' => 'text',
+                    'label' => 'Nom du client',
+                    'name' => 'customer_lastname',
+                    'required' => true,
                 ),
                 array(
-                    'type' => 'select',
-                    'label' => 'Heure de début',
-                    'name' => 'hour_from',
-                    'id' => 'hour_from', 
+                    'type' => 'text',
+                    'label' => 'Email du client',
+                    'name' => 'customer_email',
                     'required' => true,
-                    'options' => array(
-                        'query' => $this->getHourOptions(),
-                        'id' => 'value',
-                        'name' => 'label'
-                    )
                 ),
                 array(
-                    'type' => 'select',
-                    'label' => 'Heure de fin',
-                    'name' => 'hour_to',
-                    'id' => 'hour_to', 
+                    'type' => 'text',
+                    'label' => 'Téléphone du client',
+                    'name' => 'customer_phone',
+                ),
+                array(
+                    'type' => 'datetime',
+                    'label' => 'Date et heure de début',
+                    'name' => 'date_start',
                     'required' => true,
-                    'options' => array(
-                        'query' => $this->getHourOptions(),
-                        'id' => 'value',
-                        'name' => 'label'
-                    )
+                ),
+                array(
+                    'type' => 'datetime',
+                    'label' => 'Date et heure de fin',
+                    'name' => 'date_end',
+                    'required' => true,
+                ),
+                array(
+                    'type' => 'text',
+                    'label' => 'Prix total',
+                    'name' => 'total_price',
+                    'suffix' => '€',
+                    'class' => 'fixed-width-sm',
+                ),
+                array(
+                    'type' => 'text',
+                    'label' => 'Caution versée',
+                    'name' => 'deposit_paid',
+                    'suffix' => '€',
+                    'class' => 'fixed-width-sm',
                 ),
                 array(
                     'type' => 'select',
@@ -278,47 +289,25 @@ class AdminBookerAuthReservedController extends ModuleAdminController
                         'id' => 'value',
                         'name' => 'label'
                     ),
-                    'desc' => 'Attention : changer vers "Accepté" ou "Payé" vérifiera les conflits'
+                    'desc' => 'Attention : changer vers "Confirmé" ou "Payé" vérifiera les conflits'
                 ),
                 array(
-                    'type' => 'switch',
-                    'label' => 'Actif',
-                    'name' => 'active',
-                    'required' => false,
-                    'is_bool' => true,
-                    'values' => array(
-                        array(
-                            'id' => 'active_on',
-                            'value' => 1,
-                            'label' => 'Oui'
-                        ), 
-                        array(
-                            'id' => 'active_off',
-                            'value' => 0,
-                            'label' => 'Non'
-                        )
-                    ),
+                    'type' => 'textarea',
+                    'label' => 'Notes',
+                    'name' => 'notes',
+                    'rows' => 3,
+                ),
+                array(
+                    'type' => 'textarea',
+                    'label' => 'Notes administrateur',
+                    'name' => 'admin_notes',
+                    'rows' => 3,
                 )
             ),
             'submit' => array('title' => 'Sauvegarder'),			
         );
 
         return parent::renderForm();
-    }
-    
-    /**
-     * Obtenir les options d'heures
-     */
-    private function getHourOptions()
-    {
-        $hours = array();
-        for ($i = 0; $i <= 23; $i++) {
-            $hours[] = array(
-                'value' => $i,
-                'label' => sprintf('%02d:00', $i)
-            );
-        }
-        return $hours;
     }
     
     /**
@@ -343,6 +332,11 @@ class AdminBookerAuthReservedController extends ModuleAdminController
     {
         $object = new $this->className();
         $this->copyFromPost($object, $this->table);
+        
+        // Générer une référence unique si pas fournie
+        if (empty($object->booking_reference)) {
+            $object->booking_reference = 'BK' . date('Ymd') . '-' . Tools::passwdGen(6, 'NUMERIC');
+        }
         
         // Ajouter les dates de création/modification
         $object->date_add = date('Y-m-d H:i:s');
@@ -394,20 +388,14 @@ class AdminBookerAuthReservedController extends ModuleAdminController
      */
     private function validateReservation($reservation)
     {
-        // Vérifier que les heures sont cohérentes
-        if ($reservation->hour_from >= $reservation->hour_to) {
-            $this->errors[] = 'L\'heure de début doit être inférieure à l\'heure de fin';
-            return false;
-        }
-        
         // Vérifier que les dates sont cohérentes
-        if ($reservation->date_to && $reservation->date_to != '0000-00-00' && $reservation->date_reserved > $reservation->date_to) {
-            $this->errors[] = 'La date de début doit être inférieure ou égale à la date de fin';
+        if ($reservation->date_start >= $reservation->date_end) {
+            $this->errors[] = 'La date de début doit être antérieure à la date de fin';
             return false;
         }
         
-        // Vérifier les conflits pour les réservations acceptées/payées
-        if (in_array($reservation->status, [BookerAuthReserved::STATUS_ACCEPTED, BookerAuthReserved::STATUS_PAID])) {
+        // Vérifier les conflits pour les réservations confirmées/payées
+        if (in_array($reservation->status, ['confirmed', 'paid', 'completed'])) {
             if ($reservation->hasConflict()) {
                 $this->errors[] = 'Cette réservation entre en conflit avec une réservation existante';
                 return false;
@@ -478,8 +466,7 @@ class AdminBookerAuthReservedController extends ModuleAdminController
             $count = Db::getInstance()->getValue('
                 SELECT COUNT(*) 
                 FROM `' . _DB_PREFIX_ . 'booker_auth_reserved` 
-                WHERE `status` = ' . (int)$status_id . ' 
-                AND `active` = 1
+                WHERE `status` = "' . pSQL($status_id) . '"
             ');
             $stats[] = array(
                 'label' => $status_label,
