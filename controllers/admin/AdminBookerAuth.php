@@ -6,7 +6,7 @@ class AdminBookerAuthController extends ModuleAdminController
 {
     protected $_module = NULL;
     public $controller_type='admin';   
-    protected $position_identifier = 'id_auth';
+    protected $position_identifier = 'id';
 
     public function __construct()
     {
@@ -14,16 +14,16 @@ class AdminBookerAuthController extends ModuleAdminController
         $this->context = Context::getContext();
         $this->bootstrap = true;
         $this->table = 'booker_auth';
-        $this->identifier = 'id_auth';
+        $this->identifier = 'id';
         $this->className = 'BookerAuth';
         $this->_defaultOrderBy = 'date_from';
         $this->_defaultOrderWay = 'DESC';
         $this->allow_export = true;
         
         $this->fields_list = array(
-            'id_auth' => array(
+            'id' => array(
                 'title' => 'ID', 
-                'filter_key' => 'a!id_auth', 
+                'filter_key' => 'a!id', 
                 'align' => 'center',
                 'class' => 'fixed-width-xs',
                 'remove_onclick' => true
@@ -87,8 +87,8 @@ class AdminBookerAuthController extends ModuleAdminController
         $this->actions = array('edit', 'delete', 'view');
         $this->list_no_link = false;
         
-        // Jointure pour récupérer le nom du booker
-        $this->_join = 'LEFT JOIN `' . _DB_PREFIX_ . 'booker` b ON (a.id_booker = b.id_booker)';
+        // Jointure pour récupérer le nom du booker - CORRECTION : utiliser b.id au lieu de b.id_booker
+        $this->_join = 'LEFT JOIN `' . _DB_PREFIX_ . 'booker` b ON (a.id_booker = b.id)';
         $this->_select = 'b.name as booker_name';
         
         parent::__construct();
@@ -100,7 +100,7 @@ class AdminBookerAuthController extends ModuleAdminController
     private function getBookerOptions()
     {
         $bookers = Db::getInstance()->executeS('
-            SELECT b.id_booker, b.name
+            SELECT b.id, b.name
             FROM `' . _DB_PREFIX_ . 'booker` b
             WHERE b.active = 1
             ORDER BY b.name ASC
@@ -110,7 +110,7 @@ class AdminBookerAuthController extends ModuleAdminController
         if ($bookers) {
             foreach ($bookers as $booker) {
                 $options[] = array(
-                    'id_booker' => $booker['id_booker'],
+                    'id_booker' => $booker['id'],
                     'name' => $booker['name']
                 );
             }
@@ -214,7 +214,7 @@ class AdminBookerAuthController extends ModuleAdminController
         // Vérifier les chevauchements avec d'autres disponibilités du même booker
         $sql = 'SELECT COUNT(*) FROM `' . _DB_PREFIX_ . 'booker_auth` 
                 WHERE `id_booker` = ' . (int)$availability->id_booker . '
-                AND `id_auth` != ' . (int)$availability->id . '
+                AND `id` != ' . (int)$availability->id . '
                 AND `active` = 1
                 AND (
                     (`date_from` <= "' . pSQL($availability->date_from) . '" AND `date_to` > "' . pSQL($availability->date_from) . '")
