@@ -1,13 +1,13 @@
 <?php
 /**
  * Classe BookerAuthReserved - Gestion des réservations avec statuts avancés
- * Version 2.0 avec intégration commandes et paiements
+ * Version 2.1 avec intégration commandes, paiements et statuts textuels
  */
 
 class BookerAuthReserved extends ObjectModel
 {
     /** @var int */
-    public $id_reserved;
+    public $id;
     
     /** @var int */
     public $id_auth;
@@ -42,9 +42,6 @@ class BookerAuthReserved extends ObjectModel
     /** @var string */
     public $date_end;
     
-    /** @var int */
-    public $status = 0;
-    
     /** @var float */
     public $total_price;
     
@@ -52,10 +49,16 @@ class BookerAuthReserved extends ObjectModel
     public $deposit_paid = 0.00;
     
     /** @var string */
-    public $stripe_payment_intent;
+    public $status = 'pending';
     
     /** @var string */
-    public $stripe_setup_intent;
+    public $payment_status = 'pending';
+    
+    /** @var string */
+    public $stripe_payment_intent_id;
+    
+    /** @var string */
+    public $stripe_deposit_intent_id;
     
     /** @var string */
     public $notes;
@@ -64,58 +67,37 @@ class BookerAuthReserved extends ObjectModel
     public $admin_notes;
     
     /** @var string */
-    public $date_reserved;
-    
-    /** @var string */
-    public $date_expiry;
-    
-    /** @var string */
-    public $date_confirmed;
-    
-    /** @var string */
     public $date_add;
     
     /** @var string */
     public $date_upd;
-    
-    // Constantes de statuts
-    const STATUS_PENDING = 0;        // En attente de validation
-    const STATUS_VALIDATED = 1;      // Validée (en attente de paiement)
-    const STATUS_PAID = 2;           // Payée et confirmée
-    const STATUS_CANCELLED = 3;      // Annulée
-    const STATUS_EXPIRED = 4;        // Expirée
-    const STATUS_REFUNDED = 5;       // Remboursée
-    const STATUS_IN_PROGRESS = 6;    // En cours (jour J)
-    const STATUS_COMPLETED = 7;      // Terminée
     
     /**
      * @see ObjectModel::$definition
      */
     public static $definition = array(
         'table' => 'booker_auth_reserved',
-        'primary' => 'id_reserved',
+        'primary' => 'id',
         'fields' => array(
             'id_auth' => array('type' => self::TYPE_INT, 'validate' => 'isUnsignedId', 'required' => true),
             'id_booker' => array('type' => self::TYPE_INT, 'validate' => 'isUnsignedId', 'required' => true),
             'id_customer' => array('type' => self::TYPE_INT, 'validate' => 'isUnsignedId'),
             'id_order' => array('type' => self::TYPE_INT, 'validate' => 'isUnsignedId'),
             'booking_reference' => array('type' => self::TYPE_STRING, 'validate' => 'isString', 'required' => true, 'size' => 50),
-            'customer_firstname' => array('type' => self::TYPE_STRING, 'validate' => 'isName', 'size' => 100),
-            'customer_lastname' => array('type' => self::TYPE_STRING, 'validate' => 'isName', 'size' => 100),
-            'customer_email' => array('type' => self::TYPE_STRING, 'validate' => 'isEmail', 'size' => 255),
-            'customer_phone' => array('type' => self::TYPE_STRING, 'validate' => 'isPhoneNumber', 'size' => 20),
+            'customer_firstname' => array('type' => self::TYPE_STRING, 'validate' => 'isName', 'required' => true, 'size' => 100),
+            'customer_lastname' => array('type' => self::TYPE_STRING, 'validate' => 'isName', 'required' => true, 'size' => 100),
+            'customer_email' => array('type' => self::TYPE_STRING, 'validate' => 'isEmail', 'required' => true, 'size' => 150),
+            'customer_phone' => array('type' => self::TYPE_STRING, 'validate' => 'isPhoneNumber', 'size' => 50),
             'date_start' => array('type' => self::TYPE_DATE, 'validate' => 'isDate', 'required' => true),
             'date_end' => array('type' => self::TYPE_DATE, 'validate' => 'isDate', 'required' => true),
-            'status' => array('type' => self::TYPE_INT, 'validate' => 'isUnsignedInt'),
             'total_price' => array('type' => self::TYPE_FLOAT, 'validate' => 'isPrice'),
             'deposit_paid' => array('type' => self::TYPE_FLOAT, 'validate' => 'isPrice'),
-            'stripe_payment_intent' => array('type' => self::TYPE_STRING, 'validate' => 'isString', 'size' => 255),
-            'stripe_setup_intent' => array('type' => self::TYPE_STRING, 'validate' => 'isString', 'size' => 255),
+            'status' => array('type' => self::TYPE_STRING, 'validate' => 'isString', 'size' => 20),
+            'payment_status' => array('type' => self::TYPE_STRING, 'validate' => 'isString', 'size' => 20),
+            'stripe_payment_intent_id' => array('type' => self::TYPE_STRING, 'validate' => 'isString', 'size' => 255),
+            'stripe_deposit_intent_id' => array('type' => self::TYPE_STRING, 'validate' => 'isString', 'size' => 255),
             'notes' => array('type' => self::TYPE_HTML, 'validate' => 'isCleanHtml'),
             'admin_notes' => array('type' => self::TYPE_HTML, 'validate' => 'isCleanHtml'),
-            'date_reserved' => array('type' => self::TYPE_DATE, 'validate' => 'isDate'),
-            'date_expiry' => array('type' => self::TYPE_DATE, 'validate' => 'isDate'),
-            'date_confirmed' => array('type' => self::TYPE_DATE, 'validate' => 'isDate'),
             'date_add' => array('type' => self::TYPE_DATE, 'validate' => 'isDate'),
             'date_upd' => array('type' => self::TYPE_DATE, 'validate' => 'isDate')
         ),
@@ -148,14 +130,26 @@ class BookerAuthReserved extends ObjectModel
     public static function getStatuses()
     {
         return array(
-            self::STATUS_PENDING => 'En attente de validation',
-            self::STATUS_VALIDATED => 'Validée (en attente de paiement)',
-            self::STATUS_PAID => 'Payée et confirmée',
-            self::STATUS_CANCELLED => 'Annulée',
-            self::STATUS_EXPIRED => 'Expirée',
-            self::STATUS_REFUNDED => 'Remboursée',
-            self::STATUS_IN_PROGRESS => 'En cours',
-            self::STATUS_COMPLETED => 'Terminée'
+            'pending' => 'En attente',
+            'confirmed' => 'Confirmé',
+            'paid' => 'Payé',
+            'cancelled' => 'Annulé',
+            'completed' => 'Terminé',
+            'refunded' => 'Remboursé'
+        );
+    }
+    
+    /**
+     * Obtenir tous les statuts de paiement possibles
+     */
+    public static function getPaymentStatuses()
+    {
+        return array(
+            'pending' => 'En attente',
+            'authorized' => 'Autorisé',
+            'captured' => 'Capturé',
+            'cancelled' => 'Annulé',
+            'refunded' => 'Remboursé'
         );
     }
     
@@ -174,14 +168,12 @@ class BookerAuthReserved extends ObjectModel
     public static function getStatusColor($status)
     {
         $colors = array(
-            self::STATUS_PENDING => '#ffc107',     // Jaune
-            self::STATUS_VALIDATED => '#17a2b8',   // Bleu
-            self::STATUS_PAID => '#28a745',        // Vert
-            self::STATUS_CANCELLED => '#dc3545',   // Rouge
-            self::STATUS_EXPIRED => '#6c757d',     // Gris
-            self::STATUS_REFUNDED => '#fd7e14',    // Orange
-            self::STATUS_IN_PROGRESS => '#007bff', // Bleu foncé
-            self::STATUS_COMPLETED => '#6f42c1'    // Violet
+            'pending' => '#ffc107',     // Jaune
+            'confirmed' => '#17a2b8',   // Bleu
+            'paid' => '#28a745',        // Vert
+            'cancelled' => '#dc3545',   // Rouge
+            'completed' => '#6f42c1',   // Violet
+            'refunded' => '#fd7e14'     // Orange
         );
         
         return isset($colors[$status]) ? $colors[$status] : '#6c757d';
@@ -192,13 +184,14 @@ class BookerAuthReserved extends ObjectModel
      */
     public function validate($admin_notes = '')
     {
-        if ($this->status != self::STATUS_PENDING) {
+        if ($this->status !== 'pending') {
             throw new Exception('Seules les réservations en attente peuvent être validées');
         }
         
-        $this->status = self::STATUS_VALIDATED;
-        $this->admin_notes = $admin_notes;
-        $this->date_confirmed = date('Y-m-d H:i:s');
+        $this->status = 'confirmed';
+        if ($admin_notes) {
+            $this->admin_notes = $admin_notes;
+        }
         $this->date_upd = date('Y-m-d H:i:s');
         
         $result = $this->save();
@@ -231,13 +224,15 @@ class BookerAuthReserved extends ObjectModel
      */
     public function cancel($admin_notes = '', $refund = false)
     {
-        if (in_array($this->status, [self::STATUS_CANCELLED, self::STATUS_COMPLETED])) {
+        if (in_array($this->status, ['cancelled', 'completed'])) {
             throw new Exception('Cette réservation ne peut pas être annulée');
         }
         
         $old_status = $this->status;
-        $this->status = self::STATUS_CANCELLED;
-        $this->admin_notes = $admin_notes;
+        $this->status = 'cancelled';
+        if ($admin_notes) {
+            $this->admin_notes = ($this->admin_notes ? $this->admin_notes . "\n" : '') . $admin_notes;
+        }
         $this->date_upd = date('Y-m-d H:i:s');
         
         $result = $this->save();
@@ -247,7 +242,7 @@ class BookerAuthReserved extends ObjectModel
             $this->releaseTimeSlot();
             
             // Traiter le remboursement si nécessaire
-            if ($refund && $old_status == self::STATUS_PAID) {
+            if ($refund && $old_status === 'paid') {
                 $this->processRefund();
             }
             
@@ -273,15 +268,16 @@ class BookerAuthReserved extends ObjectModel
      */
     public function markAsPaid($payment_details = [])
     {
-        if ($this->status != self::STATUS_VALIDATED) {
-            throw new Exception('Seules les réservations validées peuvent être marquées comme payées');
+        if ($this->status !== 'confirmed') {
+            throw new Exception('Seules les réservations confirmées peuvent être marquées comme payées');
         }
         
-        $this->status = self::STATUS_PAID;
+        $this->status = 'paid';
+        $this->payment_status = 'captured';
         $this->date_upd = date('Y-m-d H:i:s');
         
-        if (isset($payment_details['stripe_payment_intent'])) {
-            $this->stripe_payment_intent = $payment_details['stripe_payment_intent'];
+        if (isset($payment_details['stripe_payment_intent_id'])) {
+            $this->stripe_payment_intent_id = $payment_details['stripe_payment_intent_id'];
         }
         
         if (isset($payment_details['deposit_paid'])) {
@@ -385,6 +381,59 @@ class BookerAuthReserved extends ObjectModel
     }
     
     /**
+     * Obtenir une réservation par ID de commande
+     */
+    public static function getByOrderId($order_id)
+    {
+        $sql = 'SELECT id FROM `' . _DB_PREFIX_ . 'booker_auth_reserved`
+                WHERE id_order = ' . (int)$order_id;
+        
+        $reservation_id = Db::getInstance()->getValue($sql);
+        
+        if ($reservation_id) {
+            return new self($reservation_id);
+        }
+        
+        return false;
+    }
+    
+    /**
+     * Mettre à jour le statut en fonction du statut de commande
+     */
+    public function updateStatusFromOrder($order_status)
+    {
+        $booking_status_map = [
+            Configuration::get('PS_OS_PREPARATION') => 'confirmed',
+            Configuration::get('PS_OS_PAYMENT') => 'paid',
+            Configuration::get('PS_OS_DELIVERED') => 'completed',
+            Configuration::get('PS_OS_CANCELED') => 'cancelled',
+            Configuration::get('PS_OS_REFUND') => 'refunded'
+        ];
+        
+        if (isset($booking_status_map[$order_status->id])) {
+            $this->status = $booking_status_map[$order_status->id];
+            $this->date_upd = date('Y-m-d H:i:s');
+            $this->save();
+        }
+    }
+    
+    /**
+     * Confirmer le paiement
+     */
+    public function confirmPayment()
+    {
+        if ($this->status === 'confirmed') {
+            $this->status = 'paid';
+            $this->payment_status = 'captured';
+            $this->date_upd = date('Y-m-d H:i:s');
+            $this->save();
+            
+            // Envoyer notification
+            $this->sendPaymentConfirmationNotification();
+        }
+    }
+    
+    /**
      * Obtenir ou créer un client pour cette réservation
      */
     private function getOrCreateCustomer()
@@ -457,12 +506,13 @@ class BookerAuthReserved extends ObjectModel
         // À implémenter selon le module de paiement utilisé
         // Intégration avec Stripe, PayPal, etc.
         
-        if ($this->stripe_payment_intent && Configuration::get('BOOKING_STRIPE_ENABLED')) {
+        if ($this->stripe_payment_intent_id && Configuration::get('BOOKING_STRIPE_ENABLED')) {
             // Traitement remboursement Stripe
             $this->processStripeRefund();
         }
         
-        $this->status = self::STATUS_REFUNDED;
+        $this->status = 'refunded';
+        $this->payment_status = 'refunded';
         $this->save();
     }
     
@@ -478,7 +528,7 @@ class BookerAuthReserved extends ObjectModel
             \Stripe\Stripe::setApiKey(Configuration::get('STRIPE_SECRET_KEY'));
             
             $refund = \Stripe\Refund::create([
-                'payment_intent' => $this->stripe_payment_intent,
+                'payment_intent' => $this->stripe_payment_intent_id,
                 'amount' => $this->deposit_paid * 100, // Stripe utilise les centimes
                 'reason' => 'requested_by_customer'
             ]);
@@ -498,17 +548,18 @@ class BookerAuthReserved extends ObjectModel
     {
         $expiry_date = date('Y-m-d H:i:s', strtotime('-' . (int)$expiry_hours . ' hours'));
         
-        $sql = 'SELECT id_reserved FROM `' . _DB_PREFIX_ . 'booker_auth_reserved`
-                WHERE status = ' . self::STATUS_PENDING . '
-                AND date_reserved < "' . pSQL($expiry_date) . '"';
+        $sql = 'SELECT id FROM `' . _DB_PREFIX_ . 'booker_auth_reserved`
+                WHERE status = "pending"
+                AND date_add < "' . pSQL($expiry_date) . '"';
                 
         $expired_ids = Db::getInstance()->executeS($sql);
         $count = 0;
         
         foreach ($expired_ids as $row) {
-            $reservation = new self($row['id_reserved']);
+            $reservation = new self($row['id']);
             if (Validate::isLoadedObject($reservation)) {
-                $reservation->status = self::STATUS_EXPIRED;
+                $reservation->status = 'cancelled';
+                $reservation->admin_notes = 'Annulation automatique - Réservation expirée';
                 $reservation->date_upd = date('Y-m-d H:i:s');
                 if ($reservation->save()) {
                     $reservation->releaseTimeSlot();
@@ -526,8 +577,8 @@ class BookerAuthReserved extends ObjectModel
     public static function getReservationsByStatus($status, $limit = null)
     {
         $sql = 'SELECT * FROM `' . _DB_PREFIX_ . 'booker_auth_reserved`
-                WHERE status = ' . (int)$status . '
-                ORDER BY date_reserved DESC';
+                WHERE status = "' . pSQL($status) . '"
+                ORDER BY date_add DESC';
                 
         if ($limit) {
             $sql .= ' LIMIT ' . (int)$limit;
@@ -543,7 +594,7 @@ class BookerAuthReserved extends ObjectModel
     {
         $date_condition = '';
         if ($date_from && $date_to) {
-            $date_condition = ' AND date_reserved BETWEEN "' . pSQL($date_from) . '" AND "' . pSQL($date_to) . '"';
+            $date_condition = ' AND date_add BETWEEN "' . pSQL($date_from) . '" AND "' . pSQL($date_to) . '"';
         }
         
         $stats = [];
@@ -552,7 +603,7 @@ class BookerAuthReserved extends ObjectModel
         foreach ($statuses as $status_id => $status_label) {
             $count = Db::getInstance()->getValue('
                 SELECT COUNT(*) FROM `' . _DB_PREFIX_ . 'booker_auth_reserved`
-                WHERE status = ' . (int)$status_id . $date_condition
+                WHERE status = "' . pSQL($status_id) . '"' . $date_condition
             );
             $stats[$status_id] = [
                 'label' => $status_label,
@@ -560,19 +611,103 @@ class BookerAuthReserved extends ObjectModel
             ];
         }
         
+        // Ajouter le chiffre d'affaires
+        $revenue = Db::getInstance()->getValue('
+            SELECT SUM(total_price) FROM `' . _DB_PREFIX_ . 'booker_auth_reserved`
+            WHERE status IN ("paid", "completed")' . $date_condition
+        );
+        
+        $stats['revenue'] = (float)$revenue ?: 0;
+        
         return $stats;
     }
     
+    /**
+     * Obtenir les réservations d'aujourd'hui
+     */
+    public static function getTodayReservations()
+    {
+        $today = date('Y-m-d');
+        
+        $sql = 'SELECT bar.*, b.name as booker_name
+                FROM `' . _DB_PREFIX_ . 'booker_auth_reserved` bar
+                LEFT JOIN `' . _DB_PREFIX_ . 'booker` b ON b.id = bar.id_booker
+                WHERE DATE(bar.date_start) = "' . pSQL($today) . '"
+                AND bar.status IN ("confirmed", "paid")
+                ORDER BY bar.date_start ASC';
+        
+        return Db::getInstance()->executeS($sql);
+    }
+    
+    /**
+     * Obtenir les réservations à venir
+     */
+    public static function getUpcomingReservations($days = 7)
+    {
+        $date_from = date('Y-m-d H:i:s');
+        $date_to = date('Y-m-d H:i:s', strtotime('+' . (int)$days . ' days'));
+        
+        $sql = 'SELECT bar.*, b.name as booker_name
+                FROM `' . _DB_PREFIX_ . 'booker_auth_reserved` bar
+                LEFT JOIN `' . _DB_PREFIX_ . 'booker` b ON b.id = bar.id_booker
+                WHERE bar.date_start BETWEEN "' . pSQL($date_from) . '" AND "' . pSQL($date_to) . '"
+                AND bar.status IN ("confirmed", "paid")
+                ORDER BY bar.date_start ASC';
+        
+        return Db::getInstance()->executeS($sql);
+    }
+    
+    /**
+     * Vérifier si une période est disponible
+     */
+    public static function isTimeSlotAvailable($id_booker, $date_start, $date_end, $exclude_reservation_id = null)
+    {
+        $sql = 'SELECT COUNT(*) FROM `' . _DB_PREFIX_ . 'booker_auth_reserved`
+                WHERE id_booker = ' . (int)$id_booker . '
+                AND status NOT IN ("cancelled")
+                AND (
+                    (date_start <= "' . pSQL($date_start) . '" AND date_end > "' . pSQL($date_start) . '")
+                    OR (date_start < "' . pSQL($date_end) . '" AND date_end >= "' . pSQL($date_end) . '")
+                    OR (date_start >= "' . pSQL($date_start) . '" AND date_end <= "' . pSQL($date_end) . '")
+                )';
+        
+        if ($exclude_reservation_id) {
+            $sql .= ' AND id != ' . (int)$exclude_reservation_id;
+        }
+        
+        $count = Db::getInstance()->getValue($sql);
+        
+        return $count == 0;
+    }
+    
     // Méthodes de notification (à implémenter selon les besoins)
-    private function sendValidationNotification() {
-        // À implémenter
+    private function sendValidationNotification() 
+    {
+        if (!Configuration::get('BOOKING_NOTIFICATIONS_ENABLED')) {
+            return false;
+        }
+        
+        // À implémenter avec Mail::Send()
+        // Exemple de structure pour notification de validation
     }
     
-    private function sendCancellationNotification() {
-        // À implémenter  
+    private function sendCancellationNotification() 
+    {
+        if (!Configuration::get('BOOKING_NOTIFICATIONS_ENABLED')) {
+            return false;
+        }
+        
+        // À implémenter avec Mail::Send()
+        // Exemple de structure pour notification d'annulation
     }
     
-    private function sendPaymentConfirmationNotification() {
-        // À implémenter
+    private function sendPaymentConfirmationNotification() 
+    {
+        if (!Configuration::get('BOOKING_NOTIFICATIONS_ENABLED')) {
+            return false;
+        }
+        
+        // À implémenter avec Mail::Send()
+        // Exemple de structure pour notification de confirmation de paiement
     }
 }
