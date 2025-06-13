@@ -32,6 +32,24 @@
     margin-right: 5px;
 }
 
+.quick-actions {
+    background: #fff3cd;
+    padding: 15px 20px;
+    border-radius: 8px;
+    margin-bottom: 20px;
+    border-left: 4px solid #ffc107;
+    display: none; /* Masqué par défaut, affiché lors de sélections */
+}
+
+.quick-actions .btn-group {
+    margin-right: 10px;
+}
+
+.quick-actions .btn {
+    margin-right: 5px;
+    margin-bottom: 5px;
+}
+
 /* ==========================================================================
    FULLCALENDAR CUSTOMIZATION
    ========================================================================== */
@@ -73,6 +91,7 @@
 
 .fc-button:focus {
     box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25);
+    outline: none;
 }
 
 .fc-button-primary {
@@ -108,418 +127,628 @@
 .fc-col-header-cell {
     background: #f8f9fa;
     font-weight: 600;
-    text-transform: uppercase;
-    font-size: 0.75em;
-    letter-spacing: 0.5px;
-    color: #6c757d;
+    color: #495057;
 }
 
 .fc-daygrid-day {
     background: white;
-    transition: background-color 0.2s ease;
 }
 
 .fc-daygrid-day:hover {
     background: #f8f9fa;
 }
 
-.fc-day-today {
-    background: rgba(0, 123, 255, 0.1) !important;
+.fc-daygrid-day.fc-day-today {
+    background: #e3f2fd !important;
 }
 
-.fc-day-past {
-    background: #f8f9fa;
-    color: #6c757d;
+.fc-timegrid-slot {
+    border-color: #f1f3f4;
 }
 
-.fc-day-future {
-    background: white;
-}
-
-/* Mode sélection */
-.fc-day.fc-selected {
-    background: rgba(0, 123, 255, 0.2) !important;
-    border: 2px solid #007bff !important;
-    border-radius: 4px;
+.fc-timegrid-slot-minor {
+    border-color: #f8f9fa;
 }
 
 /* ==========================================================================
-   ÉVÉNEMENTS
+   ÉVÉNEMENTS CALENDRIER
    ========================================================================== */
 
 .fc-event {
-    border: none;
-    border-radius: 6px;
-    padding: 4px 8px;
-    font-size: 0.85em;
-    font-weight: 500;
     cursor: pointer;
+    border: none !important;
+    font-size: 12px;
+    font-weight: 500;
+    border-radius: 4px;
     transition: all 0.2s ease;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+    position: relative;
 }
 
 .fc-event:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 4px 8px rgba(0,0,0,0.3);
-}
-
-.fc-event-selected {
-    border: 2px solid #ffc107 !important;
-    box-shadow: 0 0 10px rgba(255, 193, 7, 0.5) !important;
+    transform: scale(1.02);
+    box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+    z-index: 999;
 }
 
 .fc-event-title {
     font-weight: 600;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .fc-event-time {
-    font-weight: 400;
-    opacity: 0.9;
+    font-size: 11px;
+    opacity: 0.8;
 }
 
-/* Statuts des réservations */
-.fc-event-pending {
-    background: linear-gradient(135deg, #ffc107, #ffab00);
+.fc-daygrid-event {
+    margin-bottom: 2px;
+    padding: 2px 4px;
+}
+
+.fc-timegrid-event {
+    padding: 2px 4px;
+}
+
+/* Événements sélectionnés */
+.fc-event.selected {
+    box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.5) !important;
+    z-index: 1000;
+    transform: scale(1.05);
+}
+
+/* ==========================================================================
+   COULEURS DES DISPONIBILITÉS
+   ========================================================================== */
+
+.availability-available { 
+    background-color: #28a745 !important; 
+    color: white;
+}
+
+.availability-partial { 
+    background-color: #ffc107 !important; 
     color: #212529;
 }
 
-.fc-event-accepted {
-    background: linear-gradient(135deg, #17a2b8, #138496);
+.availability-full { 
+    background-color: #dc3545 !important; 
     color: white;
 }
 
-.fc-event-paid {
-    background: linear-gradient(135deg, #28a745, #20c997);
+.availability-inactive { 
+    background-color: #6c757d !important; 
     color: white;
-}
-
-.fc-event-cancelled {
-    background: linear-gradient(135deg, #dc3545, #c82333);
-    color: white;
-}
-
-.fc-event-expired {
-    background: linear-gradient(135deg, #6c757d, #545b62);
-    color: white;
-}
-
-/* Disponibilités */
-.fc-event-availability {
-    background: linear-gradient(135deg, #28a745, #20c997);
-    color: white;
-    border-left: 4px solid #155724;
-}
-
-.fc-event-availability.fc-event-with-reservations {
-    background: linear-gradient(135deg, #ffc107, #ffab00);
-    color: #212529;
-    border-left: 4px solid #856404;
-}
-
-/* ==========================================================================
-   STATISTIQUES
-   ========================================================================== */
-
-.stats-container {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-    gap: 20px;
-    margin-bottom: 30px;
-}
-
-.stat-card {
-    background: white;
-    padding: 20px;
-    border-radius: 8px;
-    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-    text-align: center;
-    transition: transform 0.2s ease;
-}
-
-.stat-card:hover {
-    transform: translateY(-5px);
-}
-
-.stat-number {
-    font-size: 2.5em;
-    font-weight: 700;
-    line-height: 1;
-    margin-bottom: 10px;
-}
-
-.stat-label {
-    font-size: 0.9em;
-    color: #6c757d;
-    font-weight: 500;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-}
-
-.stat-card.stat-primary .stat-number { color: #007bff; }
-.stat-card.stat-success .stat-number { color: #28a745; }
-.stat-card.stat-warning .stat-number { color: #ffc107; }
-.stat-card.stat-danger .stat-number { color: #dc3545; }
-.stat-card.stat-info .stat-number { color: #17a2b8; }
-
-/* ==========================================================================
-   FILTRES ET ACTIONS
-   ========================================================================== */
-
-.filters-container {
-    background: white;
-    padding: 20px;
-    border-radius: 8px;
-    margin-bottom: 20px;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-}
-
-.filter-group {
-    display: flex;
-    align-items: center;
-    margin-bottom: 15px;
-}
-
-.filter-group:last-child {
-    margin-bottom: 0;
-}
-
-.filter-group label {
-    min-width: 120px;
-    margin-right: 15px;
-    font-weight: 600;
-    color: #495057;
-}
-
-.filter-group select,
-.filter-group input {
-    flex: 1;
-    max-width: 300px;
-}
-
-.actions-container {
-    background: white;
-    padding: 15px 20px;
-    border-radius: 8px;
-    margin-bottom: 20px;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-}
-
-.action-buttons {
-    display: flex;
-    gap: 10px;
-}
-
-.btn-create {
-    background: linear-gradient(135deg, #28a745, #20c997);
-    border: none;
-    color: white;
-    font-weight: 600;
-    padding: 10px 20px;
-    border-radius: 6px;
-    transition: all 0.2s ease;
-}
-
-.btn-create:hover {
-    background: linear-gradient(135deg, #218838, #1aa17a);
-    transform: translateY(-2px);
-    box-shadow: 0 4px 8px rgba(40, 167, 69, 0.3);
-}
-
-.btn-bulk {
-    background: linear-gradient(135deg, #17a2b8, #138496);
-    border: none;
-    color: white;
-    font-weight: 600;
-    padding: 10px 20px;
-    border-radius: 6px;
-    transition: all 0.2s ease;
-}
-
-.btn-bulk:hover {
-    background: linear-gradient(135deg, #138496, #117a8b);
-    transform: translateY(-2px);
-    box-shadow: 0 4px 8px rgba(23, 162, 184, 0.3);
-}
-
-/* ==========================================================================
-   MODE SÉLECTION
-   ========================================================================== */
-
-.selection-mode-panel {
-    background: linear-gradient(135deg, #e3f2fd, #bbdefb);
-    border: 1px solid #2196f3;
-    border-radius: 8px;
-    padding: 15px 20px;
-    margin-bottom: 20px;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-}
-
-.selection-mode-panel .selection-info {
-    display: flex;
-    align-items: center;
-    gap: 15px;
-}
-
-.selection-mode-panel .selection-counter {
-    background: #2196f3;
-    color: white;
-    padding: 4px 12px;
-    border-radius: 20px;
-    font-weight: 600;
-    font-size: 0.9em;
-}
-
-.selection-mode-active .fc-day {
-    cursor: crosshair;
-}
-
-.selection-mode-active .fc-event {
-    pointer-events: none;
     opacity: 0.7;
 }
 
 /* ==========================================================================
-   LÉGENDE
+   COULEURS DES RÉSERVATIONS
    ========================================================================== */
 
-.legend-container {
-    background: white;
-    padding: 20px;
-    border-radius: 8px;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+.reservation-pending,
+.fc-event.reservation-pending { 
+    background-color: #ffc107 !important; 
+    color: #212529 !important;
 }
 
-.legend-title {
-    font-weight: 600;
-    margin-bottom: 15px;
-    color: #495057;
-    display: flex;
-    align-items: center;
-    gap: 10px;
+.reservation-confirmed,
+.fc-event.reservation-confirmed { 
+    background-color: #17a2b8 !important; 
+    color: white !important;
+}
+
+.reservation-paid,
+.fc-event.reservation-paid { 
+    background-color: #28a745 !important; 
+    color: white !important;
+}
+
+.reservation-cancelled,
+.fc-event.reservation-cancelled { 
+    background-color: #dc3545 !important; 
+    color: white !important;
+    opacity: 0.8;
+}
+
+.reservation-completed,
+.fc-event.reservation-completed { 
+    background-color: #6f42c1 !important; 
+    color: white !important;
+}
+
+.reservation-refunded,
+.fc-event.reservation-refunded { 
+    background-color: #fd7e14 !important; 
+    color: white !important;
+}
+
+/* ==========================================================================
+   LÉGENDE ET MÉTRIQUES
+   ========================================================================== */
+
+.calendar-legend {
+    margin-top: 20px;
+    padding: 15px;
+    background: #f8f9fa;
+    border-radius: 8px;
+    border-left: 4px solid #6c757d;
 }
 
 .legend-items {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-    gap: 15px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 20px;
 }
 
 .legend-item {
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: 8px;
+    font-size: 14px;
 }
 
 .legend-color {
-    width: 20px;
-    height: 20px;
-    border-radius: 4px;
-    flex-shrink: 0;
+    width: 16px;
+    height: 16px;
+    border-radius: 3px;
+    display: inline-block;
+    border: 1px solid rgba(0,0,0,0.1);
 }
 
-.legend-label {
-    font-size: 0.9em;
-    color: #495057;
+.metric-number {
+    font-weight: bold;
+    margin-bottom: 5px;
+    font-size: 2em;
 }
+
+.metric-label {
+    font-size: 0.9em;
+    color: #666;
+}
+
+/* Couleurs des métriques de réservation */
+.reservation-pending-color { color: #ffc107; }
+.reservation-confirmed-color { color: #17a2b8; }
+.reservation-paid-color { color: #28a745; }
+.reservation-cancelled-color { color: #dc3545; }
+.reservation-completed-color { color: #6f42c1; }
 
 /* ==========================================================================
-   MODALS
+   MODALES
    ========================================================================== */
 
 .modal-content {
     border-radius: 8px;
-    border: none;
-    box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+    box-shadow: 0 5px 20px rgba(0,0,0,0.15);
 }
 
 .modal-header {
-    background: linear-gradient(135deg, #007bff, #0056b3);
-    color: white;
+    background: #f8f9fa;
+    border-bottom: 1px solid #dee2e6;
     border-radius: 8px 8px 0 0;
-    border-bottom: none;
-    padding: 20px;
 }
 
 .modal-title {
     font-weight: 600;
-    margin: 0;
+    color: #2c3e50;
 }
 
 .modal-body {
-    padding: 30px;
+    padding: 20px;
 }
 
 .modal-footer {
-    border-top: 1px solid #e9ecef;
-    padding: 20px 30px;
+    background: #f8f9fa;
+    border-top: 1px solid #dee2e6;
+    border-radius: 0 0 8px 8px;
 }
+
+/* Formulaires dans les modales */
+.modal .form-group {
+    margin-bottom: 15px;
+}
+
+.modal .form-control {
+    border-radius: 4px;
+    border: 1px solid #ced4da;
+    transition: border-color 0.2s ease;
+}
+
+.modal .form-control:focus {
+    border-color: #007bff;
+    box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25);
+}
+
+.modal .btn {
+    margin-right: 5px;
+    padding: 8px 16px;
+    border-radius: 4px;
+    font-weight: 500;
+    transition: all 0.2s ease;
+}
+
+.modal .btn:hover {
+    transform: translateY(-1px);
+}
+
+/* ==========================================================================
+   MENU CONTEXTUEL
+   ========================================================================== */
+
+.context-menu {
+    background: white;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    min-width: 150px;
+    z-index: 9999;
+}
+
+.context-menu div {
+    padding: 8px 16px;
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+    font-size: 14px;
+}
+
+.context-menu div:hover {
+    background-color: #f5f5f5;
+}
+
+.context-menu div:first-child {
+    border-radius: 4px 4px 0 0;
+}
+
+.context-menu div:last-child {
+    border-radius: 0 0 4px 4px;
+}
+
+/* ==========================================================================
+   NOTIFICATIONS
+   ========================================================================== */
+
+.alert {
+    border-radius: 6px;
+    padding: 12px 16px;
+    margin-bottom: 15px;
+    border: none;
+    font-weight: 500;
+    position: relative;
+}
+
+.alert-success {
+    background-color: #d4edda;
+    color: #155724;
+    border-left: 4px solid #28a745;
+}
+
+.alert-danger {
+    background-color: #f8d7da;
+    color: #721c24;
+    border-left: 4px solid #dc3545;
+}
+
+.alert-warning {
+    background-color: #fff3cd;
+    color: #856404;
+    border-left: 4px solid #ffc107;
+}
+
+.alert-info {
+    background-color: #d1ecf1;
+    color: #0c5460;
+    border-left: 4px solid #17a2b8;
+}
+
+.alert .close {
+    position: absolute;
+    top: 8px;
+    right: 12px;
+    background: none;
+    border: none;
+    font-size: 18px;
+    line-height: 1;
+    cursor: pointer;
+    opacity: 0.5;
+    transition: opacity 0.2s ease;
+}
+
+.alert .close:hover {
+    opacity: 1;
+}
+
+/* ==========================================================================
+   PANNEAUX DE CONTRÔLE
+   ========================================================================== */
+
+.panel {
+    background: white;
+    border-radius: 8px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    margin-bottom: 20px;
+    border: none;
+}
+
+.panel-heading {
+    background: #f8f9fa;
+    border-bottom: 1px solid #dee2e6;
+    border-radius: 8px 8px 0 0;
+    padding: 15px 20px;
+    position: relative;
+}
+
+.panel-heading-action {
+    position: absolute;
+    right: 20px;
+    top: 50%;
+    transform: translateY(-50%);
+}
+
+.panel-title {
+    font-weight: 600;
+    color: #2c3e50;
+    margin: 0;
+    font-size: 16px;
+}
+
+.panel-body {
+    padding: 20px;
+}
+
+/* ==========================================================================
+   FORMULAIRES
+   ========================================================================== */
 
 .form-group {
-    margin-bottom: 20px;
-}
-
-.form-group label {
-    font-weight: 600;
-    color: #495057;
-    margin-bottom: 8px;
+    margin-bottom: 15px;
 }
 
 .form-control {
-    border-radius: 6px;
+    border-radius: 4px;
     border: 1px solid #ced4da;
-    padding: 10px 15px;
-    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+    padding: 8px 12px;
+    font-size: 14px;
+    transition: all 0.2s ease;
 }
 
 .form-control:focus {
     border-color: #007bff;
     box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25);
+    outline: none;
+}
+
+.form-control:disabled {
+    background-color: #f8f9fa;
+    opacity: 0.6;
+}
+
+label {
+    font-weight: 500;
+    color: #495057;
+    margin-bottom: 5px;
+    display: block;
+}
+
+label.required::after {
+    content: ' *';
+    color: #dc3545;
+}
+
+.help-block {
+    font-size: 12px;
+    color: #6c757d;
+    margin-top: 5px;
+}
+
+.checkbox-group {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 15px;
+}
+
+.checkbox-inline {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-weight: 400;
 }
 
 /* ==========================================================================
-   CHECKBOX LIST
+   BOUTONS
    ========================================================================== */
 
-.checkbox-list {
-    background: #f8f9fa;
-    border: 1px solid #ced4da;
-    border-radius: 6px;
-    padding: 15px;
-    max-height: 200px;
-    overflow-y: auto;
-}
-
-.checkbox-list label {
-    display: block;
-    margin-bottom: 10px;
-    font-weight: normal;
+.btn {
+    border-radius: 4px;
+    font-weight: 500;
+    padding: 8px 16px;
+    border: 1px solid transparent;
+    transition: all 0.2s ease;
+    text-decoration: none;
+    display: inline-block;
     cursor: pointer;
-    transition: color 0.2s ease;
+    line-height: 1.5;
 }
 
-.checkbox-list label:hover {
-    color: #007bff;
+.btn:hover {
+    transform: translateY(-1px);
+    text-decoration: none;
 }
 
-.checkbox-list input[type="checkbox"] {
-    margin-right: 8px;
+.btn:focus {
+    box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25);
+    outline: none;
 }
 
-.checkbox-controls {
-    margin-top: 10px;
-    display: flex;
-    gap: 5px;
+.btn-primary {
+    background-color: #007bff;
+    border-color: #007bff;
+    color: white;
 }
 
-.checkbox-controls .btn {
-    font-size: 0.8em;
+.btn-primary:hover {
+    background-color: #0056b3;
+    border-color: #004085;
+    color: white;
+}
+
+.btn-success {
+    background-color: #28a745;
+    border-color: #28a745;
+    color: white;
+}
+
+.btn-success:hover {
+    background-color: #1e7e34;
+    border-color: #1c7430;
+    color: white;
+}
+
+.btn-warning {
+    background-color: #ffc107;
+    border-color: #ffc107;
+    color: #212529;
+}
+
+.btn-warning:hover {
+    background-color: #e0a800;
+    border-color: #d39e00;
+    color: #212529;
+}
+
+.btn-danger {
+    background-color: #dc3545;
+    border-color: #dc3545;
+    color: white;
+}
+
+.btn-danger:hover {
+    background-color: #c82333;
+    border-color: #bd2130;
+    color: white;
+}
+
+.btn-info {
+    background-color: #17a2b8;
+    border-color: #17a2b8;
+    color: white;
+}
+
+.btn-info:hover {
+    background-color: #138496;
+    border-color: #117a8b;
+    color: white;
+}
+
+.btn-default {
+    background-color: #f8f9fa;
+    border-color: #dee2e6;
+    color: #495057;
+}
+
+.btn-default:hover {
+    background-color: #e9ecef;
+    border-color: #adb5bd;
+    color: #495057;
+}
+
+.btn-group .btn {
+    margin-right: 0;
+}
+
+.btn-group .btn:not(:last-child) {
+    border-right: none;
+}
+
+.btn-group .btn:first-child {
+    border-radius: 4px 0 0 4px;
+}
+
+.btn-group .btn:last-child {
+    border-radius: 0 4px 4px 0;
+}
+
+.btn-group .btn:only-child {
+    border-radius: 4px;
+}
+
+/* ==========================================================================
+   TABLEAUX
+   ========================================================================== */
+
+.table {
+    width: 100%;
+    border-collapse: collapse;
+    background: white;
+}
+
+.table th,
+.table td {
+    padding: 12px 15px;
+    text-align: left;
+    border-bottom: 1px solid #dee2e6;
+}
+
+.table th {
+    background: #f8f9fa;
+    font-weight: 600;
+    color: #495057;
+}
+
+.table-bordered {
+    border: 1px solid #dee2e6;
+}
+
+.table-bordered th,
+.table-bordered td {
+    border: 1px solid #dee2e6;
+}
+
+.calendar-table {
+    font-size: 14px;
+}
+
+.calendar-table th {
+    text-align: center;
+    background: #007bff;
+    color: white;
+    padding: 10px 5px;
+}
+
+.calendar-table td {
+    text-align: center;
+    vertical-align: top;
+    height: 80px;
+    position: relative;
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+}
+
+.calendar-table td:hover {
+    background-color: #f8f9fa;
+}
+
+/* ==========================================================================
+   BADGES ET STATUTS
+   ========================================================================== */
+
+.badge {
+    display: inline-block;
     padding: 4px 8px;
+    font-size: 11px;
+    font-weight: 500;
+    line-height: 1;
+    text-align: center;
+    white-space: nowrap;
+    vertical-align: baseline;
+    border-radius: 3px;
 }
+
+.badge-success { background-color: #28a745; color: white; }
+.badge-danger { background-color: #dc3545; color: white; }
+.badge-warning { background-color: #ffc107; color: #212529; }
+.badge-info { background-color: #17a2b8; color: white; }
+.badge-secondary { background-color: #6c757d; color: white; }
 
 /* ==========================================================================
    RESPONSIVE
@@ -528,160 +757,211 @@
 @media (max-width: 768px) {
     .calendar-container {
         padding: 10px;
+        margin: 0 -15px;
+        border-radius: 0;
     }
     
     .calendar-toolbar {
         padding: 10px;
+        margin-bottom: 10px;
+    }
+    
+    .calendar-toolbar .row {
+        margin: 0;
+    }
+    
+    .calendar-toolbar .col-md-3,
+    .calendar-toolbar .col-md-4 {
+        margin-bottom: 10px;
+        padding: 0 5px;
+    }
+    
+    .quick-actions {
+        padding: 10px;
+        margin-bottom: 10px;
+    }
+    
+    .quick-actions .btn-group {
+        display: flex;
+        flex-direction: column;
+        width: 100%;
+    }
+    
+    .quick-actions .btn {
+        margin-bottom: 5px;
+        margin-right: 0;
+    }
+    
+    .legend-items {
         flex-direction: column;
         gap: 10px;
     }
     
     .fc-header-toolbar {
         padding: 10px;
-        flex-direction: column;
-        gap: 10px;
+        margin-bottom: 10px;
     }
     
     .fc-toolbar-title {
         font-size: 1.2em;
-        text-align: center;
     }
     
-    .stats-container {
-        grid-template-columns: 1fr;
-        gap: 10px;
+    .fc-button {
+        padding: 4px 8px;
+        font-size: 12px;
     }
     
-    .stat-card {
+    .modal-dialog {
+        margin: 10px;
+    }
+    
+    .modal-body {
         padding: 15px;
     }
     
-    .stat-number {
-        font-size: 2em;
+    .btn {
+        font-size: 12px;
+        padding: 6px 12px;
     }
     
-    .filters-container {
-        padding: 15px;
-    }
-    
-    .filter-group {
-        flex-direction: column;
-        align-items: stretch;
-    }
-    
-    .filter-group label {
-        min-width: auto;
-        margin-bottom: 5px;
-    }
-    
-    .actions-container {
-        flex-direction: column;
-        gap: 15px;
-    }
-    
-    .action-buttons {
-        width: 100%;
-        justify-content: center;
-    }
-    
-    .legend-items {
-        grid-template-columns: 1fr;
-    }
-    
-    .fc-event {
-        font-size: 0.75em;
-        padding: 2px 6px;
-    }
-    
-    .selection-mode-panel {
-        flex-direction: column;
-        gap: 15px;
-        text-align: center;
+    .metric-number {
+        font-size: 1.5em;
     }
 }
 
 @media (max-width: 480px) {
-    .fc-button {
-        font-size: 0.8em;
+    .fc-event {
+        font-size: 10px;
+        padding: 1px 2px;
+    }
+    
+    .fc-event-title {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+    
+    .calendar-table td {
+        height: 60px;
+        font-size: 12px;
+    }
+    
+    .btn-group .btn {
+        font-size: 10px;
         padding: 4px 8px;
     }
     
-    .btn-create,
-    .btn-bulk {
-        padding: 8px 16px;
-        font-size: 0.9em;
+    .form-control {
+        font-size: 14px;
+        padding: 6px 10px;
     }
-    
-    .modal-body {
-        padding: 20px;
-    }
+}
+
+/* ==========================================================================
+   LOADING ET ÉTATS
+   ========================================================================== */
+
+#calendar-loading {
+    text-align: center;
+    padding: 50px;
+    color: #6c757d;
+}
+
+#calendar-loading i {
+    color: #007bff;
+    margin-bottom: 10px;
+}
+
+.loading-spinner {
+    border: 3px solid #f3f3f3;
+    border-top: 3px solid #007bff;
+    border-radius: 50%;
+    width: 30px;
+    height: 30px;
+    animation: spin 1s linear infinite;
+    margin: 0 auto;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+.empty-state {
+    text-align: center;
+    padding: 40px 20px;
+    color: #6c757d;
+}
+
+.empty-state h3 {
+    color: #495057;
+    margin-bottom: 10px;
+}
+
+.empty-state p {
+    margin-bottom: 20px;
 }
 
 /* ==========================================================================
    ANIMATIONS
    ========================================================================== */
 
-@keyframes slideIn {
-    from {
-        opacity: 0;
-        transform: translateY(-20px);
-    }
-    to {
-        opacity: 1;
-        transform: translateY(0);
-    }
-}
-
 @keyframes fadeIn {
-    from { opacity: 0; }
-    to { opacity: 1; }
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
 }
 
-@keyframes pulse {
-    0% { transform: scale(1); }
-    50% { transform: scale(1.05); }
-    100% { transform: scale(1); }
+@keyframes slideInRight {
+    from { transform: translateX(20px); opacity: 0; }
+    to { transform: translateX(0); opacity: 1; }
 }
 
-.calendar-container {
-    animation: slideIn 0.5s ease-out;
+.fade-in {
+    animation: fadeIn 0.3s ease-out;
 }
 
-.stat-card {
-    animation: fadeIn 0.5s ease-out;
+.slide-in-right {
+    animation: slideInRight 0.3s ease-out;
 }
 
-.fc-event-selected {
-    animation: pulse 2s infinite;
+/* Transition pour les événements */
+.fc-event {
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.fc-event:hover {
+    transition: all 0.1s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 /* ==========================================================================
-   THEMES ALTERNATIFS
+   DARK MODE (optionnel)
    ========================================================================== */
 
-.theme-dark .calendar-container {
-    background: #2c3e50;
-    color: white;
+@media (prefers-color-scheme: dark) {
+    /* À implémenter si nécessaire */
 }
 
-.theme-dark .calendar-toolbar,
-.theme-dark .filters-container,
-.theme-dark .actions-container,
-.theme-dark .legend-container {
-    background: #34495e;
-    color: white;
-}
+/* ==========================================================================
+   PRINT STYLES
+   ========================================================================== */
 
-.theme-dark .fc-col-header-cell {
-    background: #34495e;
-    color: #bdc3c7;
-}
-
-.theme-dark .fc-daygrid-day {
-    background: #2c3e50;
-    border-color: #34495e;
-}
-
-.theme-dark .fc-day-today {
-    background: rgba(52, 152, 219, 0.2) !important;
+@media print {
+    .calendar-toolbar,
+    .quick-actions,
+    .panel-heading-action,
+    .modal,
+    .context-menu {
+        display: none !important;
+    }
+    
+    .calendar-container {
+        box-shadow: none;
+        background: white;
+    }
+    
+    .fc-event {
+        color: black !important;
+        background: white !important;
+        border: 1px solid black !important;
+    }
 }
