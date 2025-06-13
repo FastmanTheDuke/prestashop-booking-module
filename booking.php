@@ -79,7 +79,11 @@ class Booking extends Module  {
                $this->registerHook('actionCronJob') &&
                $this->registerHook('actionProductSave') &&
                $this->registerHook('actionOrderStatusUpdate') &&
-               $this->registerHook('displayProductActions');
+               $this->registerHook('displayProductActions') &&
+               $this->registerHook('actionBookingPaymentSuccess') &&
+               $this->registerHook('actionBookingPaymentFailed') &&
+               $this->registerHook('actionBookingValidated') &&
+               $this->registerHook('actionBookingCancelled');
     }
     
     /**
@@ -103,6 +107,7 @@ class Booking extends Module  {
                 `booking_duration` int(3) DEFAULT 60,
                 `min_booking_time` int(3) DEFAULT 24,
                 `max_booking_days` int(3) DEFAULT 30,
+                `google_account` varchar(255) DEFAULT NULL,
                 `active` tinyint(1) DEFAULT 1,
                 `date_add` datetime NOT NULL,
                 `date_upd` datetime NOT NULL,
@@ -163,6 +168,24 @@ class Booking extends Module  {
                 KEY `id_order` (`id_order`),
                 KEY `status` (`status`),
                 KEY `date_range` (`date_start`, `date_end`)
+            ) ENGINE=" . _MYSQL_ENGINE_ . " DEFAULT CHARSET=utf8;",
+            
+            // Table de liaison booker-produit
+            "CREATE TABLE IF NOT EXISTS `" . _DB_PREFIX_ . "booker_product` (
+                `id_booker` int(10) unsigned NOT NULL,
+                `id_product` int(10) unsigned NOT NULL,
+                `date_add` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (`id_booker`),
+                UNIQUE KEY `unique_product` (`id_product`)
+            ) ENGINE=" . _MYSQL_ENGINE_ . " DEFAULT CHARSET=utf8;",
+            
+            // Table de liaison réservation-commande
+            "CREATE TABLE IF NOT EXISTS `" . _DB_PREFIX_ . "booker_reservation_order` (
+                `id_reservation` int(10) unsigned NOT NULL,
+                `id_order` int(10) unsigned NOT NULL,
+                `date_add` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (`id_reservation`),
+                UNIQUE KEY `unique_order` (`id_order`)
             ) ENGINE=" . _MYSQL_ENGINE_ . " DEFAULT CHARSET=utf8;"
         ];
 
@@ -172,7 +195,67 @@ class Booking extends Module  {
             }
         }
         
+        // Mise à jour des tables existantes si nécessaire
+        $this->updateExistingTables();
+        
         return true;
+    }
+    
+    /**
+     * Mise à jour des tables existantes
+     */
+    private function updateExistingTables()
+    {
+        $alterQueries = [
+            "ALTER TABLE `" . _DB_PREFIX_ . "booker` 
+             ADD COLUMN IF NOT EXISTS `id_product` int(11) NOT NULL DEFAULT 0 AFTER `id_booker`,
+             ADD COLUMN IF NOT EXISTS `location` varchar(255) DEFAULT NULL AFTER `description`,
+             ADD COLUMN IF NOT EXISTS `capacity` int(3) DEFAULT 1 AFTER `location`,
+             ADD COLUMN IF NOT EXISTS `price` DECIMAL(10,2) DEFAULT 50.00 AFTER `capacity`,
+             ADD COLUMN IF NOT EXISTS `deposit_required` TINYINT(1) DEFAULT 1 AFTER `price`,
+             ADD COLUMN IF NOT EXISTS `deposit_amount` DECIMAL(10,2) DEFAULT 0.00 AFTER `deposit_required`,
+             ADD COLUMN IF NOT EXISTS `auto_confirm` TINYINT(1) DEFAULT 0 AFTER `deposit_amount`,
+             ADD COLUMN IF NOT EXISTS `booking_duration` INT(3) DEFAULT 60 AFTER `auto_confirm`,
+             ADD COLUMN IF NOT EXISTS `min_booking_time` INT(3) DEFAULT 24 AFTER `booking_duration`,
+             ADD COLUMN IF NOT EXISTS `max_booking_days` INT(3) DEFAULT 30 AFTER `min_booking_time`,
+             ADD INDEX IF NOT EXISTS `id_product` (`id_product`)",
+             
+            "ALTER TABLE `" . _DB_PREFIX_ . "booker_auth` 
+             ADD COLUMN IF NOT EXISTS `is_available` TINYINT(1) DEFAULT 1 AFTER `date_end`,
+             ADD COLUMN IF NOT EXISTS `max_bookings` INT(3) DEFAULT 1 AFTER `is_available`,
+             ADD COLUMN IF NOT EXISTS `current_bookings` INT(3) DEFAULT 0 AFTER `max_bookings`,
+             ADD COLUMN IF NOT EXISTS `price_override` DECIMAL(10,2) DEFAULT NULL AFTER `current_bookings`,
+             ADD COLUMN IF NOT EXISTS `notes` TEXT AFTER `price_override`,
+             ADD INDEX IF NOT EXISTS `date_range` (`date_start`, `date_end`),
+             ADD INDEX IF NOT EXISTS `available` (`is_available`)",
+             
+            "ALTER TABLE `" . _DB_PREFIX_ . "booker_auth_reserved` 
+             ADD COLUMN IF NOT EXISTS `id_customer` INT(11) DEFAULT NULL AFTER `id_booker`,
+             ADD COLUMN IF NOT EXISTS `id_order` INT(11) DEFAULT NULL AFTER `id_customer`,
+             ADD COLUMN IF NOT EXISTS `booking_reference` VARCHAR(50) NOT NULL AFTER `id_order`,
+             ADD COLUMN IF NOT EXISTS `customer_phone` VARCHAR(20) DEFAULT NULL AFTER `customer_email`,
+             ADD COLUMN IF NOT EXISTS `date_start` DATETIME NOT NULL AFTER `customer_phone`,
+             ADD COLUMN IF NOT EXISTS `date_end` DATETIME NOT NULL AFTER `date_start`,
+             ADD COLUMN IF NOT EXISTS `total_price` DECIMAL(10,2) DEFAULT NULL AFTER `status`,
+             ADD COLUMN IF NOT EXISTS `deposit_paid` DECIMAL(10,2) DEFAULT 0.00 AFTER `total_price`,
+             ADD COLUMN IF NOT EXISTS `stripe_payment_intent` VARCHAR(255) DEFAULT NULL AFTER `deposit_paid`,
+             ADD COLUMN IF NOT EXISTS `stripe_setup_intent` VARCHAR(255) DEFAULT NULL AFTER `stripe_payment_intent`,
+             ADD COLUMN IF NOT EXISTS `admin_notes` TEXT AFTER `notes`,
+             ADD COLUMN IF NOT EXISTS `date_expiry` DATETIME DEFAULT NULL AFTER `date_reserved`,
+             ADD COLUMN IF NOT EXISTS `date_confirmed` DATETIME DEFAULT NULL AFTER `date_expiry`,
+             ADD UNIQUE INDEX IF NOT EXISTS `booking_reference` (`booking_reference`),
+             ADD INDEX IF NOT EXISTS `id_customer` (`id_customer`),
+             ADD INDEX IF NOT EXISTS `id_order` (`id_order`),
+             ADD INDEX IF NOT EXISTS `date_range` (`date_start`, `date_end`)"
+        ];
+        
+        foreach ($alterQueries as $query) {
+            try {
+                Db::getInstance()->execute($query);
+            } catch (Exception $e) {
+                PrestaShopLogger::addLog('Erreur mise à jour table: ' . $e->getMessage());
+            }
+        }
     }
     
     /**
@@ -185,6 +268,8 @@ class Booking extends Module  {
             'BOOKING_DEPOSIT_AMOUNT' => 20.00,
             'BOOKING_PAYMENT_ENABLED' => 1,
             'BOOKING_STRIPE_ENABLED' => 0,
+            'BOOKING_SAVE_CARDS' => 0,
+            'BOOKING_STRIPE_HOLD_DEPOSIT' => 0,
             'BOOKING_AUTO_CONFIRM' => 0,
             'BOOKING_EXPIRY_HOURS' => 24,
             'BOOKING_MULTI_SELECT' => 1,
@@ -192,13 +277,27 @@ class Booking extends Module  {
             'BOOKING_CRON_CLEAN_RESERVATIONS' => 1,
             'BOOKING_MIN_BOOKING_TIME' => 24,
             'BOOKING_MAX_BOOKING_DAYS' => 30,
+            'BOOKING_DEFAULT_DURATION' => 60,
             'BOOKING_BUSINESS_HOURS_START' => '08:00',
             'BOOKING_BUSINESS_HOURS_END' => '18:00',
             'BOOKING_ALLOWED_DAYS' => '1,2,3,4,5,6', // Lundi à Samedi
+            'BOOKING_PAYMENT_EXPIRY_MINUTES' => 30,
+            'BOOKING_AUTO_CREATE_ORDER' => 0,
+            'BOOKING_ORDER_STATUS' => Configuration::get('PS_OS_PREPARATION'),
+            'BOOKING_NOTIFICATIONS_ENABLED' => 1,
+            'BOOKING_AUTO_CONFIRMATION_EMAIL' => 1,
+            'BOOKING_AUTO_REMINDERS' => 0,
+            'BOOKING_REMINDER_HOURS' => 24,
+            'BOOKING_ADMIN_NOTIFICATIONS' => 1,
+            'BOOKING_ADMIN_EMAIL' => Configuration::get('PS_SHOP_EMAIL'),
+            'BOOKING_SYNC_PRODUCT_PRICE' => 0,
+            'BOOKING_DEBUG_MODE' => 0,
         ];
         
         foreach ($configs as $key => $value) {
-            Configuration::updateValue($key, $value);
+            if (!Configuration::get($key)) {
+                Configuration::updateValue($key, $value);
+            }
         }
         
         return true;
@@ -234,14 +333,14 @@ class Booking extends Module  {
             $tab->add();
         }
         
-        // Sous-onglets du système
+        // Sous-onglets du système mis à jour
         $tabsToCreate = [
             'AdminBooker' => ['Éléments & Produits', 3],
             'AdminBookerAuth' => ['Disponibilités', 4],
             'AdminBookerAuthReserved' => ['Réservations', 5],
-            'AdminBookerCalendarAvailability' => ['Calendrier Disponibilités', 6],
-            'AdminBookerCalendarReservations' => ['Calendrier Réservations', 7],
-            'AdminBookerSettings' => ['Configuration', 8],
+            'AdminBookerAvailabilityCalendar' => ['📅 Calendrier Disponibilités', 6],
+            'AdminBookerReservationCalendar' => ['📋 Calendrier Réservations', 7],
+            'AdminBookerSettings' => ['⚙️ Configuration', 8],
         ];
         
         foreach ($tabsToCreate as $className => $tabInfo) {
@@ -269,8 +368,11 @@ class Booking extends Module  {
     {
         $tabs_to_remove = [
             'BOOKING', 'AdminBooker', 'AdminBookerAuth', 
-            'AdminBookerAuthReserved', 'AdminBookerCalendarAvailability', 
-            'AdminBookerCalendarReservations', 'AdminBookerSettings'
+            'AdminBookerAuthReserved', 'AdminBookerAvailabilityCalendar', 
+            'AdminBookerReservationCalendar', 'AdminBookerSettings',
+            // Anciens noms pour compatibilité
+            'AdminBookerView', 'AdminBookerCalendar', 'AdminBookerCalendarAvailability',
+            'AdminBookerCalendarReservations'
         ];
         
         foreach ($tabs_to_remove as $tab_class) {
@@ -294,6 +396,8 @@ class Booking extends Module  {
     private function uninstallDB()
     {
         $tables = [
+            'booker_reservation_order',
+            'booker_product',
             'booker_auth_reserved',
             'booker_auth', 
             'booker'
@@ -314,21 +418,16 @@ class Booking extends Module  {
     private function uninstallConfiguration()
     {
         $configs = [
-            'BOOKING_DEFAULT_PRICE',
-            'BOOKING_DEPOSIT_AMOUNT',
-            'BOOKING_PAYMENT_ENABLED',
-            'BOOKING_STRIPE_ENABLED',
-            'BOOKING_AUTO_CONFIRM',
-            'BOOKING_EXPIRY_HOURS',
-            'BOOKING_MULTI_SELECT',
-            'BOOKING_EMERGENCY_PHONE',
-            'BOOKING_CRON_CLEAN_RESERVATIONS',
-            'BOOKING_MIN_BOOKING_TIME',
-            'BOOKING_MAX_BOOKING_DAYS',
-            'BOOKING_BUSINESS_HOURS_START',
-            'BOOKING_BUSINESS_HOURS_END',
-            'BOOKING_ALLOWED_DAYS',
-            'BOOKING_CMS_ID'
+            'BOOKING_DEFAULT_PRICE', 'BOOKING_DEPOSIT_AMOUNT', 'BOOKING_PAYMENT_ENABLED',
+            'BOOKING_STRIPE_ENABLED', 'BOOKING_SAVE_CARDS', 'BOOKING_STRIPE_HOLD_DEPOSIT',
+            'BOOKING_AUTO_CONFIRM', 'BOOKING_EXPIRY_HOURS', 'BOOKING_MULTI_SELECT',
+            'BOOKING_EMERGENCY_PHONE', 'BOOKING_CRON_CLEAN_RESERVATIONS', 'BOOKING_MIN_BOOKING_TIME',
+            'BOOKING_MAX_BOOKING_DAYS', 'BOOKING_DEFAULT_DURATION', 'BOOKING_BUSINESS_HOURS_START',
+            'BOOKING_BUSINESS_HOURS_END', 'BOOKING_ALLOWED_DAYS', 'BOOKING_PAYMENT_EXPIRY_MINUTES',
+            'BOOKING_AUTO_CREATE_ORDER', 'BOOKING_ORDER_STATUS', 'BOOKING_NOTIFICATIONS_ENABLED',
+            'BOOKING_AUTO_CONFIRMATION_EMAIL', 'BOOKING_AUTO_REMINDERS', 'BOOKING_REMINDER_HOURS',
+            'BOOKING_ADMIN_NOTIFICATIONS', 'BOOKING_ADMIN_EMAIL', 'BOOKING_SYNC_PRODUCT_PRICE',
+            'BOOKING_DEBUG_MODE', 'BOOKING_CMS_ID'
         ];
         
         foreach ($configs as $config) {
@@ -353,7 +452,7 @@ class Booking extends Module  {
         // Liens rapides
         $output .= $this->renderQuickLinks();
         
-        // Formulaire de configuration
+        // Formulaire de configuration simplifié (la config complète est dans AdminBookerSettings)
         $output .= $this->displayForm();
         
         // Statistiques des réservations
@@ -375,13 +474,7 @@ class Booking extends Module  {
             'BOOKING_AUTO_CONFIRM',
             'BOOKING_EXPIRY_HOURS',
             'BOOKING_MULTI_SELECT',
-            'BOOKING_EMERGENCY_PHONE',
-            'BOOKING_CRON_CLEAN_RESERVATIONS',
-            'BOOKING_MIN_BOOKING_TIME',
-            'BOOKING_MAX_BOOKING_DAYS',
-            'BOOKING_BUSINESS_HOURS_START',
-            'BOOKING_BUSINESS_HOURS_END',
-            'BOOKING_ALLOWED_DAYS'
+            'BOOKING_EMERGENCY_PHONE'
         ];
         
         foreach ($configFields as $field) {
@@ -416,14 +509,20 @@ class Booking extends Module  {
             [
                 'title' => 'Calendrier Disponibilités',
                 'desc' => 'Vue calendrier des disponibilités',
-                'href' => $this->context->link->getAdminLink('AdminBookerCalendarAvailability'),
+                'href' => $this->context->link->getAdminLink('AdminBookerAvailabilityCalendar'),
                 'icon' => 'icon-calendar-plus-o'
             ],
             [
                 'title' => 'Calendrier Réservations',
                 'desc' => 'Vue calendrier des réservations',
-                'href' => $this->context->link->getAdminLink('AdminBookerCalendarReservations'),
+                'href' => $this->context->link->getAdminLink('AdminBookerReservationCalendar'),
                 'icon' => 'icon-calendar-check-o'
+            ],
+            [
+                'title' => 'Configuration complète',
+                'desc' => 'Tous les paramètres du module',
+                'href' => $this->context->link->getAdminLink('AdminBookerSettings'),
+                'icon' => 'icon-gear'
             ]
         ];
         
@@ -450,20 +549,26 @@ class Booking extends Module  {
             </div>';
         }
         
-        $html .= '</div></div></div>';
+        $html .= '</div>
+            <div class="alert alert-info">
+                <strong>ℹ️ Note :</strong> Pour une configuration complète, utilisez l\'onglet 
+                <a href="' . $this->context->link->getAdminLink('AdminBookerSettings') . '">Configuration</a> 
+                dans le menu Réservations.
+            </div>
+        </div></div>';
         
         return $html;
     }
     
     /**
-     * Formulaire de configuration
+     * Formulaire de configuration (simplifié)
      */
     public function displayForm()
     {
         $fields_form = array(
             'form' => array(
                 'legend' => array(
-                    'title' => $this->l('Configuration du module'),
+                    'title' => $this->l('Configuration rapide'),
                     'icon' => 'icon-cogs'
                 ),
                 'input' => array(
@@ -474,14 +579,6 @@ class Booking extends Module  {
                         'suffix' => '€',
                         'class' => 'fixed-width-sm',
                         'desc' => $this->l('Prix par défaut pour une réservation')
-                    ),
-                    array(
-                        'type' => 'text',
-                        'label' => $this->l('Montant de la caution'),
-                        'name' => 'BOOKING_DEPOSIT_AMOUNT',
-                        'suffix' => '€',
-                        'class' => 'fixed-width-sm',
-                        'desc' => $this->l('Montant de la caution à verser')
                     ),
                     array(
                         'type' => 'switch',
@@ -501,22 +598,6 @@ class Booking extends Module  {
                             array('id' => 'stripe_off', 'value' => 0, 'label' => $this->l('Non'))
                         ),
                         'desc' => $this->l('Nécessite le module Stripe pour PrestaShop')
-                    ),
-                    array(
-                        'type' => 'text',
-                        'label' => $this->l('Délai d\'expiration'),
-                        'name' => 'BOOKING_EXPIRY_HOURS',
-                        'suffix' => 'heures',
-                        'class' => 'fixed-width-sm',
-                        'desc' => $this->l('Délai avant expiration d\'une réservation non confirmée')
-                    ),
-                    array(
-                        'type' => 'text',
-                        'label' => $this->l('Délai minimum de réservation'),
-                        'name' => 'BOOKING_MIN_BOOKING_TIME',
-                        'suffix' => 'heures',
-                        'class' => 'fixed-width-sm',
-                        'desc' => $this->l('Délai minimum avant la date de réservation')
                     ),
                     array(
                         'type' => 'switch',
@@ -563,12 +644,9 @@ class Booking extends Module  {
     {
         return array(
             'BOOKING_DEFAULT_PRICE' => Tools::getValue('BOOKING_DEFAULT_PRICE', Configuration::get('BOOKING_DEFAULT_PRICE')),
-            'BOOKING_DEPOSIT_AMOUNT' => Tools::getValue('BOOKING_DEPOSIT_AMOUNT', Configuration::get('BOOKING_DEPOSIT_AMOUNT')),
             'BOOKING_PAYMENT_ENABLED' => Tools::getValue('BOOKING_PAYMENT_ENABLED', Configuration::get('BOOKING_PAYMENT_ENABLED')),
             'BOOKING_STRIPE_ENABLED' => Tools::getValue('BOOKING_STRIPE_ENABLED', Configuration::get('BOOKING_STRIPE_ENABLED')),
-            'BOOKING_AUTO_CONFIRM' => Tools::getValue('BOOKING_AUTO_CONFIRM', Configuration::get('BOOKING_AUTO_CONFIRM')),
-            'BOOKING_EXPIRY_HOURS' => Tools::getValue('BOOKING_EXPIRY_HOURS', Configuration::get('BOOKING_EXPIRY_HOURS')),
-            'BOOKING_MIN_BOOKING_TIME' => Tools::getValue('BOOKING_MIN_BOOKING_TIME', Configuration::get('BOOKING_MIN_BOOKING_TIME'))
+            'BOOKING_AUTO_CONFIRM' => Tools::getValue('BOOKING_AUTO_CONFIRM', Configuration::get('BOOKING_AUTO_CONFIRM'))
         );
     }
     
@@ -586,7 +664,7 @@ class Booking extends Module  {
                 ],
                 [
                     'count' => (int)Db::getInstance()->getValue('SELECT COUNT(*) FROM `' . _DB_PREFIX_ . 'booker_auth_reserved` WHERE status = 1'),
-                    'label' => $this->l('Acceptées'),
+                    'label' => $this->l('Validées'),
                     'class' => 'info'
                 ],
                 [
@@ -595,7 +673,7 @@ class Booking extends Module  {
                     'class' => 'success'
                 ],
                 [
-                    'count' => (int)Db::getInstance()->getValue('SELECT COUNT(*) FROM `' . _DB_PREFIX_ . 'booker_auth_reserved` WHERE date_start > NOW()'),
+                    'count' => (int)Db::getInstance()->getValue('SELECT COUNT(*) FROM `' . _DB_PREFIX_ . 'booker_auth_reserved` WHERE date_start > NOW() AND status IN (1,2)'),
                     'label' => $this->l('À venir'),
                     'class' => 'primary'
                 ]
