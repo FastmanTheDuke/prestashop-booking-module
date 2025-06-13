@@ -1,337 +1,338 @@
 # Module PrestaShop - Système de Réservations Avancé v2.1
 
-![Version](https://img.shields.io/badge/version-2.1.0-blue.svg)
-![PrestaShop](https://img.shields.io/badge/PrestaShop-1.7+-green.svg)
-![PHP](https://img.shields.io/badge/PHP-7.2+-blue.svg)
-![License](https://img.shields.io/badge/license-MIT-green.svg)
-
 ## 🚀 Nouveautés v2.1
 
-### ✨ **Calendriers doubles séparés**
-- **📅 Calendrier des Disponibilités** : Interface dédiée pour gérer les créneaux disponibles
-- **📋 Calendrier des Réservations** : Interface séparée pour valider et gérer les réservations clients
-- **🎯 Navigation intuitive** avec FullCalendar 6.x et interface moderne
+### ✨ Fonctionnalités principales ajoutées
+- **📋 Double calendrier séparé** : Gestion indépendante des disponibilités et réservations
+- **🔄 Gestion avancée des statuts** : Workflow complet de validation en backoffice
+- **💳 Intégration Stripe avec caution** : Paiement sécurisé avec empreinte CB
+- **📦 Intégration produits PrestaShop** : Remplacement progressif des "Bookers" par des produits
+- **⚡ Actions en lot** : Validation, annulation et notifications multiples
+- **📧 Système de notifications** : Emails automatiques et personnalisés
+- **📊 Statistiques avancées** : Métriques en temps réel et rapports
 
-### 🔧 **Fonctionnalités avancées**
-- **⚡ Création en lot** de disponibilités avec récurrence
-- **📋 Actions en lot** : validation/annulation de plusieurs réservations
-- **📧 Système de notifications** personnalisées avec templates
-- **🔄 Copie de semaines** pour dupliquer rapidement les disponibilités
-- **💳 Intégration Stripe** avec gestion des cautions et empreinte CB
-- **📊 Statistiques avancées** et métriques en temps réel
+## 🎯 Fonctionnalités détaillées
 
-### 🛠️ **Améliorations techniques**
-- **🎨 Interface moderne** responsive avec CSS avancé
-- **⚡ Performance optimisée** avec AJAX et cache
-- **🔒 Sécurité renforcée** avec validation CSRF et sanitisation
-- **📱 Mobile-first** design adaptatif
-- **🌐 Multi-langues** et multi-devises
+### 📅 Calendrier des Disponibilités
+- Interface FullCalendar moderne et responsive
+- Création en lot de créneaux avec options avancées
+- Copie de semaines complètes
+- Créneaux récurrents (quotidien, hebdomadaire, mensuel)
+- Drag & drop pour modification rapide
+- Filtrages par élément et période
+- Export CSV des données
 
-## 📁 Structure du projet
+### 📋 Calendrier des Réservations
+- Vue centralisée de toutes les réservations
+- Multi-sélection avec Ctrl + clic
+- Actions rapides : validation, annulation, notifications
+- Gestion des statuts : en attente → confirmé → payé → terminé
+- Création automatique de commandes PrestaShop
+- Intégration système de remboursement
+- Notifications personnalisées par email
+
+### 🔧 Administration Avancée
+- **Interface d'administration moderne** avec panneaux de contrôle
+- **Configuration centralisée** dans AdminBookerSettings
+- **Statistiques en temps réel** avec métriques visuelles
+- **Système de logs détaillés** pour le débogage
+- **Outils de maintenance** automatisés
+
+## 📁 Structure complète du projet
 
 ```
 booking/
-├── 📄 booking.php                      # Module principal v2.1
-├── 📁 classes/                         # Classes métier
-│   ├── 🔧 Booker.php                  # Éléments réservables  
-│   ├── ⏰ BookerAuth.php              # Gestion des disponibilités
-│   └── 🎫 BookerAuthReserved.php      # Gestion des réservations
-├── 📁 controllers/
-│   ├── 📁 admin/                      # Contrôleurs administration
-│   │   ├── AdminBooker.php
-│   │   ├── AdminBookerAuth.php
-│   │   ├── AdminBookerAuthReserved.php
-│   │   ├── 📅 AdminBookerAvailabilityCalendar.php  # NOUVEAU
-│   │   ├── 📋 AdminBookerReservationCalendar.php   # NOUVEAU  
-│   │   └── ⚙️ AdminBookerSettings.php              # NOUVEAU
-│   └── 📁 front/                      # Contrôleurs front-office
-├── 📁 views/
-│   ├── 📁 templates/
-│   │   ├── 📁 admin/                  # Templates administration
-│   │   │   ├── 📅 availability_calendar.tpl        # NOUVEAU
-│   │   │   ├── 📋 reservation_calendar.tpl         # NOUVEAU
-│   │   │   └── ⚙️ settings.tpl                    # NOUVEAU
-│   │   └── 📁 front/                  # Templates front-office
-│   ├── 📁 css/                        # Styles
-│   │   ├── 🎨 admin-calendar.css                   # NOUVEAU
-│   │   └── 📱 booking-responsive.css               # NOUVEAU
-│   └── 📁 js/                         # Scripts JavaScript
-│       ├── 📅 availability-calendar.js             # NOUVEAU
-│       ├── 📋 reservation-calendar.js              # NOUVEAU
-│       └── ⚡ booking-utils.js                     # NOUVEAU
-├── 📁 mails/                          # Templates emails
-└── 📁 sql/                            # Scripts base de données
+├── booking.php                              # Module principal v2.1
+├── classes/                                 # Classes métier
+│   ├── Booker.php                          # Éléments réservables
+│   ├── BookerAuth.php                      # Disponibilités
+│   └── BookerAuthReserved.php              # Réservations avec statuts
+├── controllers/
+│   ├── admin/                              # Contrôleurs admin
+│   │   ├── AdminBooker.php                 # Gestion éléments
+│   │   ├── AdminBookerAuth.php             # Gestion disponibilités
+│   │   ├── AdminBookerAuthReserved.php     # Gestion réservations
+│   │   ├── AdminBookerAvailabilityCalendar.php  # 📅 NOUVEAU
+│   │   ├── AdminBookerReservationCalendar.php   # 📋 NOUVEAU
+│   │   └── AdminBookerSettings.php         # ⚙️ NOUVEAU
+│   └── front/                              # Contrôleurs front
+│       └── BookingController.php           # Interface client
+├── views/
+│   ├── templates/
+│   │   ├── admin/                          # Templates admin
+│   │   │   ├── availability_calendar.tpl   # 📅 NOUVEAU
+│   │   │   ├── reservation_calendar.tpl    # 📋 NOUVEAU
+│   │   │   └── settings.tpl                # ⚙️ NOUVEAU
+│   │   └── front/                          # Templates front
+│   │       └── booking.tpl                 # Interface réservation
+│   ├── css/                                # Styles
+│   │   ├── admin-calendar.css              # 🎨 NOUVEAU
+│   │   ├── admin-booking.css               # Styles admin
+│   │   └── booking-front.css               # Styles front
+│   └── js/                                 # Scripts JavaScript
+│       ├── availability-calendar.js        # 📅 NOUVEAU
+│       ├── reservation-calendar.js         # 📋 NOUVEAU
+│       ├── admin-booking.js                # Scripts admin
+│       └── booking-front.js                # Scripts front
+├── sql/                                    # Scripts SQL
+│   ├── install.sql                         # Installation
+│   └── upgrade/                            # Mises à jour
+└── mails/                                  # Templates emails
+    ├── fr/                                 # Français
+    └── en/                                 # Anglais
 ```
 
 ## 🛠️ Installation
 
-### 1. **Téléchargement**
+### 1. Téléchargement
 ```bash
 git clone https://github.com/FastmanTheDuke/prestashop-booking-module.git
+cd prestashop-booking-module
 ```
 
-### 2. **Installation sur PrestaShop**
+### 2. Installation dans PrestaShop
 ```bash
-cp -r prestashop-booking-module /path/to/prestashop/modules/booking
+# Copier dans le dossier modules
+cp -r . /path/to/prestashop/modules/booking/
+
+# Ou via l'interface admin PrestaShop
+# Modules > Gestionnaire de modules > Ajouter un module
 ```
 
-### 3. **Activation**
-1. Aller dans **Modules → Gestionnaire de modules**
-2. Rechercher "**Système de Réservations Avancé**"
-3. Cliquer sur "**Installer**"
+### 3. Configuration initiale
+1. **Activer le module** dans l'interface PrestaShop
+2. **Configurer les paramètres** dans `Réservations > Configuration`
+3. **Créer les premiers éléments** dans `Réservations > Éléments & Produits`
+4. **Définir les disponibilités** via le calendrier
 
-### 4. **Configuration**
-- Accéder à **RESERVATIONS** dans le menu administrateur
-- Utiliser l'onglet **⚙️ Configuration** pour tous les paramètres
+## ⚙️ Configuration avancée
 
-## 🎯 Guide d'utilisation
+### Paramètres généraux
+- **Prix par défaut** : Tarif standard des réservations
+- **Montant de caution** : Somme à pré-autoriser via Stripe
+- **Durée des créneaux** : Granularité des disponibilités
+- **Délai d'expiration** : Temps limite pour valider une réservation
+- **Confirmation automatique** : Validation sans intervention manuelle
 
-### 📋 **Gestion des éléments réservables**
-1. **RESERVATIONS → Éléments & Produits**
-2. Créer vos bateaux/véhicules/services
-3. Associer à des produits PrestaShop existants
-4. Définir prix, durée et capacité
-
-### 📅 **Calendrier des Disponibilités**
-1. **RESERVATIONS → 📅 Calendrier Disponibilités**
-2. **Créer des créneaux** : clic sur une date/heure
-3. **Actions en lot** : sélection multiple + actions
-4. **Copie de semaine** : dupliquer rapidement
-5. **Récurrence** : créneaux automatiques
-
-**🎯 Fonctionnalités clés :**
-- ✅ Glisser-déposer pour déplacer
-- ✅ Redimensionner pour ajuster la durée  
-- ✅ Menu contextuel (clic droit)
-- ✅ Filtrage par élément
-- ✅ Export CSV/Excel
-
-### 📋 **Calendrier des Réservations**
-1. **RESERVATIONS → 📋 Calendrier Réservations**
-2. **Validation** des réservations en attente
-3. **Actions en lot** : Ctrl+clic pour sélectionner
-4. **Gestion des statuts** avancés
-5. **Notifications** personnalisées
-
-**🎯 Statuts disponibles :**
-- 🟡 **En attente** : Nouvelle réservation
-- 🔵 **Confirmé** : Validé par admin
-- 🟢 **Payé** : Paiement effectué
-- 🔴 **Annulé** : Réservation annulée
-- 🟣 **Terminé** : Service effectué
-- 🟠 **Remboursé** : Montant remboursé
-
-### ⚙️ **Configuration avancée**
-
-#### **Paramètres généraux**
+### Intégration Stripe
 ```php
-Prix par défaut : 50.00€
-Durée standard : 60 minutes
-Réservations max : Illimité
-Délai minimum : 2 heures
-Expiration : 24 heures
+// Configuration requise
+Configuration::updateValue('BOOKING_STRIPE_ENABLED', 1);
+Configuration::updateValue('BOOKING_STRIPE_HOLD_DEPOSIT', 1);
+Configuration::updateValue('BOOKING_SAVE_CARDS', 1);
 ```
 
-#### **Paiement et Stripe**
-```php
-Stripe activé : Oui/Non
-Caution obligatoire : Montant
-Empreinte CB : Oui/Non
-Remboursement automatique : Oui/Non
-```
+### Notifications email
+- **Templates personnalisables** dans `/mails/`
+- **Variables disponibles** : `{booking_reference}`, `{customer_name}`, `{date_start}`, etc.
+- **Envoi automatique** selon les événements (confirmation, rappel, annulation)
 
-#### **Notifications**
-```php
-Email confirmation : Automatique
-Rappels : 24h avant
-Notifications admin : Oui/Non
-Templates personnalisés : Disponibles
-```
+## 🎮 Guide d'utilisation
 
-## 💳 Intégration Stripe
+### Pour les administrateurs
 
-### **Configuration**
-1. Installer le module **Stripe Payments** officiel
-2. Configurer les clés API dans **RESERVATIONS → Configuration**
-3. Activer les options de caution
+#### 1. Gestion des disponibilités
+- Accédez à `Réservations > Calendrier Disponibilités`
+- **Créer un créneau** : Cliquez sur une date ou utilisez la sélection
+- **Création en lot** : Utilisez l'outil de création massive
+- **Copier une semaine** : Dupliquez rapidement des plannings
 
-### **Fonctionnalités Stripe**
-- 💳 **Empreinte CB** : Autorisation sans débit
-- 🔒 **Caution bloquée** : Montant gelé
-- ⚡ **Capture différée** : Débit à la validation
-- 🔄 **Remboursement automatique** : En cas d'annulation
-- 📊 **Reporting intégré** : Suivi des transactions
+#### 2. Gestion des réservations
+- Accédez à `Réservations > Calendrier Réservations`
+- **Valider en lot** : Sélectionnez avec Ctrl + clic puis validez
+- **Filtrer par statut** : Affichez uniquement les réservations voulues
+- **Exporter les données** : Téléchargez au format CSV
 
-## 🔧 Développement et personnalisation
-
-### **Hooks disponibles**
-```php
-// Nouveaux hooks v2.1
-actionBookingValidated          // Après validation réservation
-actionBookingCancelled          // Après annulation  
-actionBookingPaymentReceived    // Après paiement confirmé
-displayBookingCalendarHeader    // Dans l'en-tête calendrier
-displayBookingReservationForm   // Dans le formulaire réservation
-```
-
-### **API REST (à venir v2.2)**
+#### 3. Actions rapides
 ```javascript
-// Exemples d'endpoints futurs
-GET    /api/bookings/availabilities
-POST   /api/bookings/reservations  
-PUT    /api/bookings/reservations/{id}
-DELETE /api/bookings/reservations/{id}
+// Multi-sélection (Ctrl + clic)
+// Actions disponibles :
+- Validation en lot avec création de commandes
+- Annulation avec motif et remboursement automatique
+- Envoi de notifications personnalisées
+- Export des données sélectionnées
 ```
 
-### **Classes principales**
+### Pour les développeurs
+
+#### Hooks disponibles
 ```php
-// Gestion des éléments réservables
-$booker = new Booker($id);
-$booker->name = "Bateau Premium";
-$booker->price = 89.50;
-$booker->save();
+// Hook après changement de statut
+public function hookActionBookingStatusChange($params)
+{
+    $reservation = $params['reservation'];
+    $old_status = $params['old_status'];
+    $new_status = $params['new_status'];
+    
+    // Votre logique personnalisée
+}
 
-// Gestion des disponibilités  
-$availability = new BookerAuth();
-$availability->id_booker = $booker->id;
-$availability->date_from = "2025-07-15 09:00:00";
-$availability->max_bookings = 1;
-$availability->save();
+// Hook avant création de commande
+public function hookActionBookingBeforeOrderCreation($params)
+{
+    $reservation = $params['reservation'];
+    // Modifier les données de commande si nécessaire
+}
+```
 
-// Gestion des réservations
-$reservation = new BookerAuthReserved();
-$reservation->validate("Réservation approuvée");
-$reservation->createOrder(); // Création commande PrestaShop
+#### Classes principales
+```php
+// Création d'une disponibilité
+$auth = new BookerAuth();
+$auth->id_booker = 1;
+$auth->date_from = '2025-06-15 09:00:00';
+$auth->date_to = '2025-06-15 10:00:00';
+$auth->max_bookings = 1;
+$auth->save();
+
+// Gestion d'une réservation
+$reservation = new BookerAuthReserved($id);
+$reservation->status = 'confirmed';
+$reservation->save();
+$reservation->createOrder(); // Créer la commande PrestaShop
 ```
 
 ## 📊 Métriques et statistiques
 
-### **Dashboard principal**
-- 📈 **Éléments actifs** : Nombre d'éléments disponibles
-- ⏰ **Créneaux disponibles** : Total des disponibilités
-- 🎫 **Réservations actives** : En cours et confirmées  
-- 💰 **CA mensuel** : Chiffre d'affaires du mois
+### Tableau de bord
+- **Éléments actifs** : Nombre d'éléments réservables
+- **Créneaux disponibles** : Disponibilités futures
+- **Réservations en cours** : Par statut (attente, confirmé, payé)
+- **Chiffre d'affaires** : Revenus mensuels et prévisionnels
 
-### **Rapports détaillés**
-- 📋 **Export CSV** : Toutes les données
-- 📊 **Graphiques** : Évolution temporelle
-- 🔍 **Filtres avancés** : Par période, statut, élément
-- 📧 **Rapports automatiques** : Envoi programmé
+### Rapports avancés
+- **Taux de conversion** : Disponibilités → Réservations confirmées
+- **Analyse temporelle** : Pics de demande par période
+- **Performance par élément** : Éléments les plus demandés
+- **Satisfaction client** : Statistiques d'annulation
 
-## 🚀 Roadmap v2.2
+## 🚀 Intégrations
 
-### **Prochaines fonctionnalités**
-- 🌐 **API REST complète** : Intégration tierce
-- 📱 **Application mobile** : Gestion nomade  
-- 🤖 **Intelligence artificielle** : Optimisation automatique
-- 🔗 **Synchronisation calendriers** : Google, Outlook
-- 💬 **Chat intégré** : Support client en temps réel
-- 📋 **Workflow avancé** : Processus personnalisés
+### Avec PrestaShop
+- **Produits** : Association Bookers ↔ Produits du catalogue
+- **Commandes** : Création automatique après validation
+- **Clients** : Synchronisation des données utilisateur
+- **Stocks** : Gestion des disponibilités comme stock
 
-### **Améliorations techniques**
-- ⚡ **Performance** : Cache Redis, optimisations
-- 🔒 **Sécurité** : Audit complet, 2FA
-- 🌍 **Internationalisation** : Plus de langues
-- 📊 **Analytics** : Métriques détaillées
-- 🔧 **Personnalisation** : Thèmes et widgets
+### Modules compatibles
+- **Stripe Official** : Paiements avec caution et empreinte
+- **MailChimp** : Synchronisation des contacts
+- **Google Analytics** : Tracking des conversions
+- **Social Login** : Connexion simplifiée
 
-## 💡 Cas d'usage
+## 🛡️ Sécurité et performance
 
-### **🚤 Location de bateaux**
-- Gestion flotte de bateaux
-- Réservations demi-journée/journée
-- Caution obligatoire
-- Météo et conditions de mer
+### Mesures de sécurité
+- **Validation des données** : Sanitisation complète des entrées
+- **Protection CSRF** : Tokens sur toutes les actions sensibles
+- **Contrôle d'accès** : Permissions granulaires par rôle
+- **Chiffrement** : Données sensibles protégées
 
-### **🚗 Location de véhicules** 
-- Parc automobile varié
-- Réservations longue durée
-- Assurances incluses
-- Kilométrage illimité
+### Optimisations
+- **Cache intelligent** : Mise en cache des requêtes fréquentes
+- **Requêtes optimisées** : Index sur les champs critiques
+- **Lazy loading** : Chargement progressif des données
+- **Compression** : Assets minifiés en production
 
-### **🏠 Hébergements saisonniers**
-- Gîtes et chambres d'hôtes  
-- Réservations multi-jours
-- Nettoyage automatique
-- Check-in/check-out flexibles
+## 🔧 Maintenance et support
 
-### **⚽ Terrains de sport**
-- Courts de tennis, terrains foot
-- Réservations horaires
-- Éclairage automatique
-- Matériel inclus
+### Logs et débogage
+```php
+// Activer le mode debug
+Configuration::updateValue('BOOKING_DEBUG_MODE', 1);
 
-### **👨‍⚕️ Consultations médicales**
-- Rendez-vous praticiens
-- Créneaux personnalisés
-- Rappels automatiques
-- Téléconsultations
+// Consulter les logs
+tail -f /var/log/prestashop/booking.log
+```
 
-## ❓ FAQ
+### Nettoyage automatique
+- **Réservations expirées** : Suppression automatique via cron
+- **Cache** : Vidage périodique des données temporaires
+- **Logs** : Rotation et archivage automatique
 
-### **Questions fréquentes**
+### Sauvegarde
+```sql
+-- Sauvegarder les données principales
+mysqldump -u user -p database_name booker booker_auth booker_auth_reserved > backup_booking.sql
+```
 
-**Q: Puis-je limiter les réservations par client ?**
-R: Oui, dans Configuration → Paramètres avancés → Limites par client
+## 📞 Support et contribution
 
-**Q: Comment gérer les annulations ?**
-R: Système de délais configurables + remboursement automatique possible
+### Documentation
+- **Wiki complet** : [GitHub Wiki](https://github.com/FastmanTheDuke/prestashop-booking-module/wiki)
+- **API Reference** : Documentation des classes et méthodes
+- **Tutoriels vidéo** : Guides pas à pas
 
-**Q: Le module est-il compatible multi-boutique ?**
-R: Oui, gestion complète des contextes multi-boutique PrestaShop
-
-**Q: Puis-je personnaliser les emails ?**  
-R: Oui, templates Smarty modifiables dans `/mails/`
-
-**Q: Comment sauvegarder mes données ?**
-R: Export automatique possible + intégration solutions de sauvegarde
-
-### **Support technique**
-
-- 📧 **Email** : support@mdxp.io
-- 💬 **GitHub Issues** : [Signaler un bug](https://github.com/FastmanTheDuke/prestashop-booking-module/issues)
-- 📖 **Documentation** : [Wiki complet](https://github.com/FastmanTheDuke/prestashop-booking-module/wiki)
-- 🎥 **Tutoriels vidéo** : [Chaîne YouTube](https://youtube.com/mdxp)
-
-## 🤝 Contribution
-
-### **Comment contribuer**
+### Contribution
 1. **Fork** le projet
-2. Créer une **branche feature** (`git checkout -b feature/amazing-feature`)
-3. **Commit** vos changements (`git commit -m 'Add amazing feature'`)
-4. **Push** vers la branche (`git push origin feature/amazing-feature`)
-5. Ouvrir une **Pull Request**
+2. **Créer une branche** : `git checkout -b feature/nouvelle-fonctionnalite`
+3. **Commit** : `git commit -am 'Ajout nouvelle fonctionnalité'`
+4. **Push** : `git push origin feature/nouvelle-fonctionnalite`
+5. **Pull Request** : Proposer vos modifications
 
-### **Guidelines**
-- 📝 **PSR-12** : Respect des standards PHP
-- 🧪 **Tests unitaires** : Coverage minimum 80%
-- 📖 **Documentation** : Comments et README à jour
-- 🔒 **Sécurité** : Validation et sanitisation
-- 🌍 **Accessibilité** : Support WCAG 2.1
+### Issues et bugs
+- **Signaler un bug** : [GitHub Issues](https://github.com/FastmanTheDuke/prestashop-booking-module/issues)
+- **Demander une fonctionnalité** : [Feature Requests](https://github.com/FastmanTheDuke/prestashop-booking-module/discussions)
+- **Support communautaire** : [Discord](https://discord.gg/booking-module)
+
+## 📝 Changelog
+
+### v2.1.0 - 2025-06-13
+#### 🎉 Nouvelles fonctionnalités
+- **Double calendrier** : Séparation complète disponibilités/réservations
+- **Gestion avancée des statuts** : Workflow complet de validation
+- **Actions en lot** : Validation/annulation multiple avec options
+- **Intégration Stripe** : Paiement avec caution et empreinte CB
+- **Interface moderne** : Nouveau design avec FullCalendar 6
+- **Notifications enrichies** : Templates personnalisables et envoi automatique
+
+#### 🔧 Améliorations
+- Interface d'administration repensée
+- Performance améliorée avec cache intelligent
+- Meilleure intégration avec PrestaShop
+- Documentation complète et mise à jour
+
+#### 🐛 Corrections
+- Résolution des conflits de timezone
+- Amélioration de la gestion des erreurs
+- Optimisation des requêtes SQL
+- Corrections de compatibilité multi-langues
+
+### v2.0.0 - Version précédente
+- Système de base avec quiz et booking
+- Contrôleurs AdminBooker, AdminBookerAuth, AdminBookerAuthReserved
+- Interface basique de réservation
+
+## 📋 Roadmap
+
+### v2.2.0 - Prochaine version
+- [ ] **Intégration Google Calendar** : Synchronisation bidirectionnelle
+- [ ] **Application mobile** : App native iOS/Android
+- [ ] **API REST complète** : Endpoints pour intégrations tierces
+- [ ] **Système de commentaires** : Avis clients sur les réservations
+- [ ] **Géolocalisation** : Cartes et directions
+
+### v2.3.0 - Version future
+- [ ] **Intelligence artificielle** : Recommandations automatiques
+- [ ] **Réalité augmentée** : Prévisualisation des espaces
+- [ ] **Blockchain** : Certificats de réservation infalsifiables
+- [ ] **IoT Integration** : Contrôle des équipements connectés
 
 ## 📄 Licence
 
-Ce projet est sous licence **MIT** - voir le fichier [LICENSE](LICENSE) pour plus de détails.
+Ce projet est sous licence **MIT**. Voir le fichier [LICENSE](LICENSE) pour plus de détails.
+
+---
 
 ## 🙏 Remerciements
 
-- **PrestaShop** pour la plateforme exceptionnelle
-- **FullCalendar** pour la librairie de calendrier
-- **Stripe** pour l'API de paiement
-- **Community** pour les retours et contributions
+Merci à tous les contributeurs qui ont rendu ce projet possible :
+- **FastmanTheDuke** - Développeur principal
+- **Communauté PrestaShop** - Tests et retours
+- **Beta testeurs** - Validation des fonctionnalités
 
 ---
 
-<div align="center">
+**Développé avec ❤️ pour la communauté PrestaShop**
 
-**⭐ Si ce module vous aide, n'hésitez pas à lui donner une étoile !**
-
-[🌟 Donner une étoile](https://github.com/FastmanTheDuke/prestashop-booking-module) • 
-[🐛 Signaler un bug](https://github.com/FastmanTheDuke/prestashop-booking-module/issues) • 
-[💡 Suggérer une fonctionnalité](https://github.com/FastmanTheDuke/prestashop-booking-module/discussions)
-
----
-
-**Développé avec ❤️ par [FastmanTheDuke](https://github.com/FastmanTheDuke)**
-
-</div>
+[⬆ Retour en haut](#module-prestashop---système-de-réservations-avancé-v21)
