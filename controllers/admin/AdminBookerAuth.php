@@ -87,7 +87,7 @@ class AdminBookerAuthController extends ModuleAdminController
         $this->actions = array('edit', 'delete', 'view');
         $this->list_no_link = false;
         
-        // Jointure pour récupérer le nom du booker
+        // Jointure pour récupérer le nom du booker - CORRECTION du nom de colonne
         $this->_join = 'LEFT JOIN `' . _DB_PREFIX_ . 'booker` b ON (a.id_booker = b.id_booker)';
         $this->_select = 'b.name as booker_name';
         
