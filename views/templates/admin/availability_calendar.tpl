@@ -1,391 +1,547 @@
 {*
-* Template pour la vue calendrier des disponibilités
-* Gestion des créneaux de disponibilité avec outils avancés
+* Template pour le calendrier de gestion des disponibilités
+* Interface moderne avec FullCalendar et outils de gestion avancés
 *}
 
 <div class="panel">
     <div class="panel-heading">
-        <i class="icon-calendar-o"></i>
-        Calendrier des Disponibilités
-        <span class="badge badge-success">
-            {$stats.future_availabilities} futures disponibilités
-        </span>
-    </div>
-</div>
-
-{* Statistiques rapides *}
-<div class="row">
-    <div class="col-lg-3 col-md-6">
-        <div class="alert alert-info text-center">
-            <div style="font-size: 2em; font-weight: bold;">{$stats.total_availabilities}</div>
-            <div>Total disponibilités</div>
+        <i class="icon-calendar-plus-o"></i> 
+        {l s='Calendrier des Disponibilités' mod='booking'}
+        <div class="panel-heading-action">
+            <div class="btn-group">
+                <button type="button" class="btn btn-default dropdown-toggle" data-toggle="dropdown">
+                    <i class="icon-wrench"></i> Actions <span class="caret"></span>
+                </button>
+                <ul class="dropdown-menu" role="menu">
+                    <li><a href="#" id="bulk-create-btn"><i class="icon-plus"></i> Création en lot</a></li>
+                    <li><a href="#" id="copy-week-btn"><i class="icon-copy"></i> Copier une semaine</a></li>
+                    <li><a href="#" id="recurring-btn"><i class="icon-repeat"></i> Créneaux récurrents</a></li>
+                    <li class="divider"></li>
+                    <li><a href="#" id="export-btn"><i class="icon-download"></i> Exporter</a></li>
+                </ul>
+            </div>
         </div>
     </div>
-    <div class="col-lg-3 col-md-6">
-        <div class="alert alert-success text-center">
-            <div style="font-size: 2em; font-weight: bold;">{$stats.active_availabilities}</div>
-            <div>Actives</div>
-        </div>
-    </div>
-    <div class="col-lg-3 col-md-6">
-        <div class="alert alert-primary text-center">
-            <div style="font-size: 2em; font-weight: bold;">{$stats.future_availabilities}</div>
-            <div>Futures</div>
-        </div>
-    </div>
-    <div class="col-lg-3 col-md-6">
-        <div class="alert alert-warning text-center">
-            <div style="font-size: 1.5em; font-weight: bold;">{$stats.occupancy_rate}%</div>
-            <div>Taux d'occupation</div>
-        </div>
-    </div>
-</div>
-
-{* Barre d'outils avancés *}
-<div class="panel">
+    
     <div class="panel-body">
-        <div class="row">
-            <div class="col-md-6">
-                <div class="btn-group" role="group">
-                    <button type="button" class="btn btn-primary" id="today-btn">
-                        <i class="icon-home"></i> Aujourd'hui
-                    </button>
-                    <button type="button" class="btn btn-default" id="prev-btn">
-                        <i class="icon-chevron-left"></i> Précédent
-                    </button>
-                    <button type="button" class="btn btn-default" id="next-btn">
-                        Suivant <i class="icon-chevron-right"></i>
-                    </button>
+        {* Barre d'outils du calendrier *}
+        <div class="calendar-toolbar">
+            <div class="row">
+                <div class="col-md-4">
+                    <div class="form-group">
+                        <label for="booker-filter">{l s='Filtrer par élément :' mod='booking'}</label>
+                        <select id="booker-filter" class="form-control">
+                            <option value="">{l s='Tous les éléments' mod='booking'}</option>
+                            {foreach from=$bookers item=booker}
+                                <option value="{$booker.id}">{$booker.name}</option>
+                            {/foreach}
+                        </select>
+                    </div>
                 </div>
                 
-                <div class="btn-group ml-2" role="group">
-                    <button type="button" class="btn btn-info" data-view="dayGridMonth">Mois</button>
-                    <button type="button" class="btn btn-default" data-view="timeGridWeek">Semaine</button>
+                <div class="col-md-4">
+                    <div class="form-group">
+                        <label for="view-selector">{l s='Vue :' mod='booking'}</label>
+                        <div class="btn-group" id="view-selector">
+                            <button type="button" class="btn btn-default" data-view="dayGridMonth">
+                                <i class="icon-calendar"></i> {l s='Mois' mod='booking'}
+                            </button>
+                            <button type="button" class="btn btn-default" data-view="timeGridWeek">
+                                <i class="icon-calendar-o"></i> {l s='Semaine' mod='booking'}
+                            </button>
+                            <button type="button" class="btn btn-default" data-view="timeGridDay">
+                                <i class="icon-calendar-plus-o"></i> {l s='Jour' mod='booking'}
+                            </button>
+                        </div>
+                    </div>
                 </div>
-            </div>
-            
-            <div class="col-md-6 text-right">
-                <div class="btn-group">
-                    <button type="button" class="btn btn-success" id="new-availability-btn">
-                        <i class="icon-plus"></i> Nouvelle disponibilité
-                    </button>
-                    <button type="button" class="btn btn-info" id="bulk-create-btn">
-                        <i class="icon-calendar"></i> Création en lot
-                    </button>
-                    <button type="button" class="btn btn-warning" id="copy-week-btn">
-                        <i class="icon-copy"></i> Copier semaine
-                    </button>
+                
+                <div class="col-md-4">
+                    <div class="form-group">
+                        <label>{l s='Navigation :' mod='booking'}</label>
+                        <div class="btn-group">
+                            <button type="button" class="btn btn-default" id="prev-btn">
+                                <i class="icon-chevron-left"></i> {l s='Précédent' mod='booking'}
+                            </button>
+                            <button type="button" class="btn btn-primary" id="today-btn">
+                                <i class="icon-dot-circle-o"></i> {l s='Aujourd\'hui' mod='booking'}
+                            </button>
+                            <button type="button" class="btn btn-default" id="next-btn">
+                                <i class="icon-chevron-right"></i> {l s='Suivant' mod='booking'}
+                            </button>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
         
-        <hr>
-        
-        <div class="row">
-            <div class="col-md-6">
-                <div class="form-group">
-                    <label for="booker-filter">Filtrer par élément :</label>
-                    <select class="form-control" id="booker-filter">
-                        <option value="all">Tous les éléments</option>
-                        {foreach from=$bookers item=booker}
-                            <option value="{$booker.id_booker}">
-                                {$booker.name|escape:'html':'UTF-8'}
-                                {if $booker.price} - {$booker.price}€{/if}
-                            </option>
-                        {/foreach}
-                    </select>
-                </div>
+        {* Zone du calendrier *}
+        <div class="calendar-container">
+            <div id="calendar-loading" class="text-center" style="padding: 50px;">
+                <i class="icon-spinner icon-spin icon-3x"></i>
+                <p>{l s='Chargement du calendrier...' mod='booking'}</p>
             </div>
             
-            <div class="col-md-6">
-                <div class="form-group">
-                    <label for="preset-times">Créneaux prédéfinis :</label>
-                    <select class="form-control" id="preset-times">
-                        {foreach from=$preset_times key=time_key item=time_label}
-                            <option value="{$time_key}">{$time_label|escape:'html':'UTF-8'}</option>
-                        {/foreach}
-                    </select>
+            <div id="calendar" style="display: none;"></div>
+        </div>
+        
+        {* Légende *}
+        <div class="calendar-legend">
+            <div class="row">
+                <div class="col-md-12">
+                    <h4>{l s='Légende :' mod='booking'}</h4>
+                    <div class="legend-items">
+                        <span class="legend-item">
+                            <span class="legend-color" style="background-color: #28a745;"></span>
+                            {l s='Disponible' mod='booking'}
+                        </span>
+                        <span class="legend-item">
+                            <span class="legend-color" style="background-color: #ffc107;"></span>
+                            {l s='Partiellement réservé' mod='booking'}
+                        </span>
+                        <span class="legend-item">
+                            <span class="legend-color" style="background-color: #dc3545;"></span>
+                            {l s='Complet' mod='booking'}
+                        </span>
+                        <span class="legend-item">
+                            <span class="legend-color" style="background-color: #6c757d;"></span>
+                            {l s='Indisponible' mod='booking'}
+                        </span>
+                    </div>
                 </div>
             </div>
         </div>
     </div>
 </div>
 
-{* Mode sélection multiple *}
-<div class="panel panel-default" id="selection-mode-panel" style="display: none;">
-    <div class="panel-body">
-        <div class="row">
-            <div class="col-md-8">
-                <i class="icon-hand-pointer-o"></i>
-                <strong>Mode sélection activé</strong> - Cliquez sur les dates pour sélectionner
-                <span id="selected-dates-count" class="badge badge-primary ml-2">0</span> date(s) sélectionnée(s)
+{* Statistiques des disponibilités *}
+<div class="row">
+    <div class="col-md-3">
+        <div class="panel">
+            <div class="panel-body text-center">
+                <div class="metric-number" style="font-size: 2em; color: #28a745;">
+                    {$availability_stats.total_slots|default:0}
+                </div>
+                <div class="metric-label">{l s='Créneaux total' mod='booking'}</div>
             </div>
-            <div class="col-md-4 text-right">
-                <button type="button" class="btn btn-success btn-sm" id="apply-bulk-create">
-                    <i class="icon-check"></i> Créer disponibilités
-                </button>
-                <button type="button" class="btn btn-default btn-sm" id="cancel-selection">
-                    <i class="icon-times"></i> Annuler
-                </button>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="panel">
+            <div class="panel-body text-center">
+                <div class="metric-number" style="font-size: 2em; color: #007bff;">
+                    {$availability_stats.available_slots|default:0}
+                </div>
+                <div class="metric-label">{l s='Disponibles' mod='booking'}</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="panel">
+            <div class="panel-body text-center">
+                <div class="metric-number" style="font-size: 2em; color: #ffc107;">
+                    {$availability_stats.partial_slots|default:0}
+                </div>
+                <div class="metric-label">{l s='Partiels' mod='booking'}</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="panel">
+            <div class="panel-body text-center">
+                <div class="metric-number" style="font-size: 2em; color: #dc3545;">
+                    {$availability_stats.full_slots|default:0}
+                </div>
+                <div class="metric-label">{l s='Complets' mod='booking'}</div>
             </div>
         </div>
     </div>
 </div>
 
-{* Calendrier principal *}
-<div class="panel">
-    <div class="panel-body">
-        <div id="calendar"></div>
-    </div>
-</div>
-
-{* Légende *}
-<div class="panel">
-    <div class="panel-heading">
-        <i class="icon-info"></i> Légende
-    </div>
-    <div class="panel-body">
-        <div class="row">
-            <div class="col-md-4">
-                <span class="label" style="background-color: #28a745;">■</span>
-                Disponible (sans réservation)
-            </div>
-            <div class="col-md-4">
-                <span class="label" style="background-color: #ffc107; color: #212529;">■</span>
-                Disponible (avec réservations)
-            </div>
-            <div class="col-md-4">
-                <span class="label" style="background-color: #dc3545;">■</span>
-                Non disponible
-            </div>
-        </div>
-    </div>
-</div>
-
-{* Modal pour création/édition de disponibilité *}
+{* Modal de création/édition de disponibilité *}
 <div class="modal fade" id="availability-modal" tabindex="-1" role="dialog">
-    <div class="modal-dialog" role="document">
+    <div class="modal-dialog modal-lg" role="document">
         <div class="modal-content">
             <div class="modal-header">
-                <button type="button" class="close" data-dismiss="modal">
-                    <span>&times;</span>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
                 </button>
-                <h4 class="modal-title" id="availability-modal-title">Nouvelle disponibilité</h4>
+                <h4 class="modal-title">
+                    <i class="icon-calendar-plus-o"></i> 
+                    <span id="modal-title">{l s='Nouvelle disponibilité' mod='booking'}</span>
+                </h4>
             </div>
             
             <div class="modal-body">
                 <form id="availability-form">
-                    <input type="hidden" id="availability-id" name="availability_id">
-                    
-                    <div class="form-group">
-                        <label for="modal-booker">Élément *</label>
-                        <select class="form-control" id="modal-booker" name="booker_id" required>
-                            <option value="">Sélectionner un élément</option>
-                            {foreach from=$bookers item=booker}
-                                <option value="{$booker.id_booker}">
-                                    {$booker.name|escape:'html':'UTF-8'}
-                                </option>
-                            {/foreach}
-                        </select>
-                    </div>
+                    <input type="hidden" id="availability-id" name="id" value="">
                     
                     <div class="row">
                         <div class="col-md-6">
                             <div class="form-group">
-                                <label for="modal-date-from">Date de début *</label>
-                                <input type="date" class="form-control" id="modal-date-from" name="date_from" required>
-                            </div>
-                        </div>
-                        <div class="col-md-6">
-                            <div class="form-group">
-                                <label for="modal-date-to">Date de fin *</label>
-                                <input type="date" class="form-control" id="modal-date-to" name="date_to" required>
-                            </div>
-                        </div>
-                    </div>
-                    
-                    <div class="alert alert-info">
-                        <i class="icon-lightbulb-o"></i>
-                        <strong>Astuce :</strong> Pour une disponibilité sur une seule journée, utilisez la même date pour le début et la fin.
-                    </div>
-                </form>
-            </div>
-            
-            <div class="modal-footer">
-                <button type="button" class="btn btn-default" data-dismiss="modal">Annuler</button>
-                <button type="button" class="btn btn-danger" id="delete-availability-btn" style="display: none;">
-                    <i class="icon-trash"></i> Supprimer
-                </button>
-                <button type="button" class="btn btn-primary" id="save-availability-btn">
-                    <i class="icon-save"></i> Enregistrer
-                </button>
-            </div>
-        </div>
-    </div>
-</div>
-
-{* Modal pour création en lot *}
-<div class="modal fade" id="bulk-create-modal" tabindex="-1" role="dialog">
-    <div class="modal-dialog modal-lg" role="document">
-        <div class="modal-content">
-            <div class="modal-header">
-                <button type="button" class="close" data-dismiss="modal">
-                    <span>&times;</span>
-                </button>
-                <h4 class="modal-title">Création en lot de disponibilités</h4>
-            </div>
-            
-            <div class="modal-body">
-                <form id="bulk-create-form">
-                    <div class="row">
-                        <div class="col-md-6">
-                            <div class="form-group">
-                                <label for="bulk-booker">Élément *</label>
-                                <select class="form-control" id="bulk-booker" name="booker_id" required>
-                                    <option value="">Sélectionner un élément</option>
+                                <label for="availability-booker" class="required">
+                                    {l s='Élément :' mod='booking'}
+                                </label>
+                                <select id="availability-booker" name="id_booker" class="form-control" required>
+                                    <option value="">{l s='Sélectionner un élément' mod='booking'}</option>
                                     {foreach from=$bookers item=booker}
-                                        <option value="{$booker.id_booker}">
-                                            {$booker.name|escape:'html':'UTF-8'}
+                                        <option value="{$booker.id}" data-price="{$booker.price}" data-duration="{$booker.duration}">
+                                            {$booker.name}
                                         </option>
                                     {/foreach}
-                                </select>
-                            </div>
-                            
-                            <div class="form-group">
-                                <label for="bulk-start-date">Date de début *</label>
-                                <input type="date" class="form-control" id="bulk-start-date" name="start_date" required>
-                            </div>
-                            
-                            <div class="form-group">
-                                <label for="bulk-duration">Durée *</label>
-                                <select class="form-control" id="bulk-duration" name="duration_weeks" required>
-                                    <option value="1">1 semaine</option>
-                                    <option value="2">2 semaines</option>
-                                    <option value="4" selected>4 semaines (1 mois)</option>
-                                    <option value="8">8 semaines (2 mois)</option>
-                                    <option value="12">12 semaines (3 mois)</option>
                                 </select>
                             </div>
                         </div>
                         
                         <div class="col-md-6">
                             <div class="form-group">
-                                <label>Jours de la semaine *</label>
-                                <div class="checkbox-list">
-                                    <label class="checkbox-inline">
-                                        <input type="checkbox" name="selected_days[]" value="1"> Lundi
-                                    </label>
-                                    <label class="checkbox-inline">
-                                        <input type="checkbox" name="selected_days[]" value="2"> Mardi
-                                    </label>
-                                    <label class="checkbox-inline">
-                                        <input type="checkbox" name="selected_days[]" value="3"> Mercredi
-                                    </label>
-                                    <label class="checkbox-inline">
-                                        <input type="checkbox" name="selected_days[]" value="4"> Jeudi
-                                    </label>
-                                    <label class="checkbox-inline">
-                                        <input type="checkbox" name="selected_days[]" value="5"> Vendredi
-                                    </label>
-                                    <label class="checkbox-inline">
-                                        <input type="checkbox" name="selected_days[]" value="6"> Samedi
-                                    </label>
-                                    <label class="checkbox-inline">
-                                        <input type="checkbox" name="selected_days[]" value="0"> Dimanche
-                                    </label>
-                                </div>
-                                
-                                <div class="mt-2">
-                                    <button type="button" class="btn btn-xs btn-default" id="select-weekdays">
-                                        Lun-Ven
-                                    </button>
-                                    <button type="button" class="btn btn-xs btn-default" id="select-weekend">
-                                        Sam-Dim
-                                    </button>
-                                    <button type="button" class="btn btn-xs btn-default" id="select-all-days">
-                                        Tous
-                                    </button>
-                                    <button type="button" class="btn btn-xs btn-default" id="clear-days">
-                                        Aucun
-                                    </button>
-                                </div>
-                            </div>
-                            
-                            <div class="form-group">
-                                <label for="bulk-end-date">Date limite (optionnel)</label>
-                                <input type="date" class="form-control" id="bulk-end-date" name="end_date">
-                                <small class="text-muted">Si spécifiée, la création s'arrêtera à cette date</small>
+                                <label for="availability-max-bookings">
+                                    {l s='Réservations maximum :' mod='booking'}
+                                </label>
+                                <input type="number" id="availability-max-bookings" name="max_bookings" 
+                                       class="form-control" min="1" value="1">
                             </div>
                         </div>
                     </div>
                     
-                    <div class="alert alert-warning">
-                        <i class="icon-warning"></i>
-                        <strong>Attention :</strong> Cette action créera des disponibilités pour les jours sélectionnés sur la période choisie. 
-                        Les créneaux existants ne seront pas modifiés.
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="form-group">
+                                <label for="availability-date-from" class="required">
+                                    {l s='Date de début :' mod='booking'}
+                                </label>
+                                <input type="date" id="availability-date-from" name="date_from" 
+                                       class="form-control" required>
+                            </div>
+                        </div>
+                        
+                        <div class="col-md-6">
+                            <div class="form-group">
+                                <label for="availability-date-to" class="required">
+                                    {l s='Date de fin :' mod='booking'}
+                                </label>
+                                <input type="date" id="availability-date-to" name="date_to" 
+                                       class="form-control" required>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="form-group">
+                                <label for="availability-time-from" class="required">
+                                    {l s='Heure de début :' mod='booking'}
+                                </label>
+                                <input type="time" id="availability-time-from" name="time_from" 
+                                       class="form-control" value="{$business_hours_start}" required>
+                            </div>
+                        </div>
+                        
+                        <div class="col-md-6">
+                            <div class="form-group">
+                                <label for="availability-time-to" class="required">
+                                    {l s='Heure de fin :' mod='booking'}
+                                </label>
+                                <input type="time" id="availability-time-to" name="time_to" 
+                                       class="form-control" value="{$business_hours_end}" required>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="form-group">
+                                <label for="availability-price-override">
+                                    {l s='Prix spécial :' mod='booking'}
+                                </label>
+                                <div class="input-group">
+                                    <input type="number" id="availability-price-override" name="price_override" 
+                                           class="form-control" step="0.01" min="0">
+                                    <span class="input-group-addon">€</span>
+                                </div>
+                                <p class="help-block">{l s='Laissez vide pour utiliser le prix par défaut' mod='booking'}</p>
+                            </div>
+                        </div>
+                        
+                        <div class="col-md-6">
+                            <div class="form-group">
+                                <label for="availability-active">
+                                    {l s='Statut :' mod='booking'}
+                                </label>
+                                <select id="availability-active" name="active" class="form-control">
+                                    <option value="1">{l s='Actif' mod='booking'}</option>
+                                    <option value="0">{l s='Inactif' mod='booking'}</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="availability-notes">
+                            {l s='Notes :' mod='booking'}
+                        </label>
+                        <textarea id="availability-notes" name="notes" class="form-control" rows="3"></textarea>
+                    </div>
+                    
+                    {* Options récurrentes *}
+                    <div class="panel panel-default">
+                        <div class="panel-heading">
+                            <h4 class="panel-title">
+                                <a data-toggle="collapse" href="#recurring-options">
+                                    <i class="icon-repeat"></i> {l s='Options de récurrence' mod='booking'}
+                                </a>
+                            </h4>
+                        </div>
+                        <div id="recurring-options" class="panel-collapse collapse">
+                            <div class="panel-body">
+                                <div class="row">
+                                    <div class="col-md-4">
+                                        <div class="form-group">
+                                            <label for="availability-recurring">
+                                                {l s='Récurrence :' mod='booking'}
+                                            </label>
+                                            <select id="availability-recurring" name="recurring" class="form-control">
+                                                <option value="0">{l s='Aucune' mod='booking'}</option>
+                                                <option value="1">{l s='Récurrent' mod='booking'}</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="col-md-4">
+                                        <div class="form-group">
+                                            <label for="availability-recurring-type">
+                                                {l s='Type :' mod='booking'}
+                                            </label>
+                                            <select id="availability-recurring-type" name="recurring_type" class="form-control">
+                                                <option value="">{l s='Sélectionner' mod='booking'}</option>
+                                                <option value="daily">{l s='Quotidien' mod='booking'}</option>
+                                                <option value="weekly">{l s='Hebdomadaire' mod='booking'}</option>
+                                                <option value="monthly">{l s='Mensuel' mod='booking'}</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="col-md-4">
+                                        <div class="form-group">
+                                            <label for="availability-recurring-end">
+                                                {l s='Fin de récurrence :' mod='booking'}
+                                            </label>
+                                            <input type="date" id="availability-recurring-end" name="recurring_end" 
+                                                   class="form-control">
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </form>
             </div>
             
             <div class="modal-footer">
-                <button type="button" class="btn btn-default" data-dismiss="modal">Annuler</button>
-                <button type="button" class="btn btn-primary" id="execute-bulk-create-btn">
-                    <i class="icon-magic"></i> Créer les disponibilités
+                <button type="button" class="btn btn-default" data-dismiss="modal">
+                    <i class="icon-times"></i> {l s='Annuler' mod='booking'}
+                </button>
+                <button type="button" class="btn btn-primary" id="save-availability-btn">
+                    <i class="icon-save"></i> {l s='Enregistrer' mod='booking'}
                 </button>
             </div>
         </div>
     </div>
 </div>
 
-{* Modal pour copie de semaine *}
-<div class="modal fade" id="copy-week-modal" tabindex="-1" role="dialog">
-    <div class="modal-dialog" role="document">
+{* Modal de création en lot *}
+<div class="modal fade" id="bulk-create-modal" tabindex="-1" role="dialog">
+    <div class="modal-dialog modal-lg" role="document">
         <div class="modal-content">
             <div class="modal-header">
-                <button type="button" class="close" data-dismiss="modal">
-                    <span>&times;</span>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
                 </button>
-                <h4 class="modal-title">Copier une semaine</h4>
+                <h4 class="modal-title">
+                    <i class="icon-plus"></i> {l s='Création en lot de disponibilités' mod='booking'}
+                </h4>
             </div>
             
             <div class="modal-body">
-                <form id="copy-week-form">
-                    <div class="form-group">
-                        <label for="copy-booker">Élément *</label>
-                        <select class="form-control" id="copy-booker" name="booker_id" required>
-                            <option value="">Sélectionner un élément</option>
-                            {foreach from=$bookers item=booker}
-                                <option value="{$booker.id_booker}">
-                                    {$booker.name|escape:'html':'UTF-8'}
-                                </option>
-                            {/foreach}
-                        </select>
-                    </div>
-                    
-                    <div class="form-group">
-                        <label for="copy-source-week">Semaine source *</label>
-                        <input type="week" class="form-control" id="copy-source-week" name="source_week" required>
-                        <small class="text-muted">Sélectionnez la semaine à copier</small>
-                    </div>
-                    
-                    <div class="form-group">
-                        <label for="copy-target-week">Semaine de destination *</label>
-                        <input type="week" class="form-control" id="copy-target-week" name="target_week" required>
-                        <small class="text-muted">Sélectionnez la semaine où coller</small>
-                    </div>
-                    
+                <form id="bulk-create-form">
                     <div class="alert alert-info">
-                        <i class="icon-info"></i>
-                        Cette action copiera toutes les disponibilités de la semaine source vers la semaine de destination.
-                        Les disponibilités existantes ne seront pas écrasées.
+                        <i class="icon-info-circle"></i>
+                        {l s='Créez plusieurs disponibilités en une seule fois pour un ou plusieurs éléments.' mod='booking'}
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="form-group">
+                                <label for="bulk-bookers" class="required">
+                                    {l s='Éléments :' mod='booking'}
+                                </label>
+                                <select id="bulk-bookers" name="bookers[]" class="form-control" multiple required>
+                                    {foreach from=$bookers item=booker}
+                                        <option value="{$booker.id}">{$booker.name}</option>
+                                    {/foreach}
+                                </select>
+                                <p class="help-block">{l s='Maintenez Ctrl pour sélectionner plusieurs éléments' mod='booking'}</p>
+                            </div>
+                        </div>
+                        
+                        <div class="col-md-6">
+                            <div class="form-group">
+                                <label for="bulk-days">
+                                    {l s='Jours de la semaine :' mod='booking'}
+                                </label>
+                                <div class="checkbox-group">
+                                    <label class="checkbox-inline">
+                                        <input type="checkbox" name="days[]" value="1" checked> {l s='Lun' mod='booking'}
+                                    </label>
+                                    <label class="checkbox-inline">
+                                        <input type="checkbox" name="days[]" value="2" checked> {l s='Mar' mod='booking'}
+                                    </label>
+                                    <label class="checkbox-inline">
+                                        <input type="checkbox" name="days[]" value="3" checked> {l s='Mer' mod='booking'}
+                                    </label>
+                                    <label class="checkbox-inline">
+                                        <input type="checkbox" name="days[]" value="4" checked> {l s='Jeu' mod='booking'}
+                                    </label>
+                                    <label class="checkbox-inline">
+                                        <input type="checkbox" name="days[]" value="5" checked> {l s='Ven' mod='booking'}
+                                    </label>
+                                    <label class="checkbox-inline">
+                                        <input type="checkbox" name="days[]" value="6"> {l s='Sam' mod='booking'}
+                                    </label>
+                                    <label class="checkbox-inline">
+                                        <input type="checkbox" name="days[]" value="0"> {l s='Dim' mod='booking'}
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="form-group">
+                                <label for="bulk-date-start" class="required">
+                                    {l s='Période de début :' mod='booking'}
+                                </label>
+                                <input type="date" id="bulk-date-start" name="date_start" 
+                                       class="form-control" required>
+                            </div>
+                        </div>
+                        
+                        <div class="col-md-6">
+                            <div class="form-group">
+                                <label for="bulk-date-end" class="required">
+                                    {l s='Période de fin :' mod='booking'}
+                                </label>
+                                <input type="date" id="bulk-date-end" name="date_end" 
+                                       class="form-control" required>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="form-group">
+                                <label for="bulk-time-start" class="required">
+                                    {l s='Heure de début :' mod='booking'}
+                                </label>
+                                <input type="time" id="bulk-time-start" name="time_start" 
+                                       class="form-control" value="{$business_hours_start}" required>
+                            </div>
+                        </div>
+                        
+                        <div class="col-md-6">
+                            <div class="form-group">
+                                <label for="bulk-time-end" class="required">
+                                    {l s='Heure de fin :' mod='booking'}
+                                </label>
+                                <input type="time" id="bulk-time-end" name="time_end" 
+                                       class="form-control" value="{$business_hours_end}" required>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="form-group">
+                                <label for="bulk-slot-duration">
+                                    {l s='Durée des créneaux (minutes) :' mod='booking'}
+                                </label>
+                                <input type="number" id="bulk-slot-duration" name="slot_duration" 
+                                       class="form-control" value="{$default_duration}" min="15" step="15">
+                            </div>
+                        </div>
+                        
+                        <div class="col-md-6">
+                            <div class="form-group">
+                                <label for="bulk-max-bookings">
+                                    {l s='Réservations max par créneau :' mod='booking'}
+                                </label>
+                                <input type="number" id="bulk-max-bookings" name="max_bookings" 
+                                       class="form-control" value="1" min="1">
+                            </div>
+                        </div>
                     </div>
                 </form>
             </div>
             
             <div class="modal-footer">
-                <button type="button" class="btn btn-default" data-dismiss="modal">Annuler</button>
+                <button type="button" class="btn btn-default" data-dismiss="modal">
+                    <i class="icon-times"></i> {l s='Annuler' mod='booking'}
+                </button>
+                <button type="button" class="btn btn-success" id="execute-bulk-create-btn">
+                    <i class="icon-plus"></i> {l s='Créer les disponibilités' mod='booking'}
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+{* Modal de copie de semaine *}
+<div class="modal fade" id="copy-week-modal" tabindex="-1" role="dialog">
+    <div class="modal-dialog" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+                <h4 class="modal-title">
+                    <i class="icon-copy"></i> {l s='Copier une semaine' mod='booking'}
+                </h4>
+            </div>
+            
+            <div class="modal-body">
+                <form id="copy-week-form">
+                    <div class="form-group">
+                        <label for="copy-source-week" class="required">
+                            {l s='Semaine source :' mod='booking'}
+                        </label>
+                        <input type="week" id="copy-source-week" name="source_week" 
+                               class="form-control" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="copy-target-weeks" class="required">
+                            {l s='Semaines de destination :' mod='booking'}
+                        </label>
+                        <select id="copy-target-weeks" name="target_weeks[]" class="form-control" multiple required>
+                            {* Les options seront générées par JavaScript *}
+                        </select>
+                        <p class="help-block">{l s='Maintenez Ctrl pour sélectionner plusieurs semaines' mod='booking'}</p>
+                    </div>
+                    
+                    <div class="alert alert-warning">
+                        <i class="icon-warning"></i>
+                        {l s='Les disponibilités existantes ne seront pas écrasées.' mod='booking'}
+                    </div>
+                </form>
+            </div>
+            
+            <div class="modal-footer">
+                <button type="button" class="btn btn-default" data-dismiss="modal">
+                    <i class="icon-times"></i> {l s='Annuler' mod='booking'}
+                </button>
                 <button type="button" class="btn btn-primary" id="execute-copy-week-btn">
-                    <i class="icon-copy"></i> Copier
+                    <i class="icon-copy"></i> {l s='Copier' mod='booking'}
                 </button>
             </div>
         </div>
@@ -396,105 +552,122 @@
 <script>
 var AvailabilityCalendar = {
     ajaxUrls: {$ajax_urls|json_encode},
-    token: '{$token}',
-    config: {$default_config|json_encode},
+    config: {
+        locale: 'fr',
+        business_hours: {
+            startTime: '{$business_hours_start}',
+            endTime: '{$business_hours_end}',
+            daysOfWeek: [1, 2, 3, 4, 5] // Lundi à vendredi par défaut
+        },
+        default_view: 'timeGridWeek',
+        slot_duration: '{$default_duration}',
+        current_date: '{$current_date}'
+    },
+    bookers: {$bookers|json_encode},
     currentDate: '{$current_date}',
     selectedDates: [],
     selectionMode: false,
     
     // Messages de traduction
     messages: {
-        'confirm_delete': 'Êtes-vous sûr de vouloir supprimer cette disponibilité ?',
-        'confirm_bulk_create': 'Créer les disponibilités pour les jours sélectionnés ?',
-        'no_booker_selected': 'Veuillez sélectionner un élément',
-        'no_days_selected': 'Veuillez sélectionner au moins un jour de la semaine',
-        'invalid_date_range': 'La date de fin doit être postérieure à la date de début',
-        'loading': 'Chargement...',
-        'error': 'Erreur lors de l\'opération',
-        'success_create': 'Disponibilité créée avec succès',
-        'success_bulk_create': 'Disponibilités créées en lot',
-        'success_update': 'Disponibilité mise à jour',
-        'success_delete': 'Disponibilité supprimée',
-        'success_copy': 'Semaine copiée avec succès',
-        'conflict_reservations': 'Attention : des réservations existent sur cette période'
+        'confirm_delete': '{l s='Êtes-vous sûr de vouloir supprimer cette disponibilité ?' mod='booking' js=1}',
+        'confirm_bulk_create': '{l s='Créer les disponibilités pour les jours sélectionnés ?' mod='booking' js=1}',
+        'confirm_copy_week': '{l s='Copier les disponibilités de cette semaine ?' mod='booking' js=1}',
+        'error_loading': '{l s='Erreur lors du chargement des données' mod='booking' js=1}',
+        'success_save': '{l s='Disponibilité enregistrée avec succès' mod='booking' js=1}',
+        'success_delete': '{l s='Disponibilité supprimée avec succès' mod='booking' js=1}',
+        'success_bulk_create': '{l s='Disponibilités créées avec succès' mod='booking' js=1}',
+        'success_copy_week': '{l s='Semaine copiée avec succès' mod='booking' js=1}',
+        'validation_required': '{l s='Veuillez remplir tous les champs requis' mod='booking' js=1}',
+        'validation_date_range': '{l s='La date de fin doit être postérieure à la date de début' mod='booking' js=1}',
+        'validation_time_range': '{l s='L\'heure de fin doit être postérieure à l\'heure de début' mod='booking' js=1}'
     }
 };
 </script>
 
-{* Styles personnalisés *}
 <style>
-.fc-day-grid-container {
-    cursor: pointer;
-}
-
-.fc-day.fc-selected {
-    background-color: rgba(0, 123, 255, 0.1) !important;
-    border: 2px solid #007bff !important;
-}
-
-.fc-event-availability {
-    border-radius: 4px;
-    padding: 2px 4px;
-    margin: 1px 0;
-}
-
-.fc-event-availability:hover {
-    transform: scale(1.02);
-    transition: transform 0.2s;
-}
-
-.checkbox-list {
-    max-height: 120px;
-    overflow-y: auto;
-    border: 1px solid #ddd;
-    padding: 10px;
-    border-radius: 4px;
-    background-color: #f9f9f9;
-}
-
-.checkbox-list label {
-    display: block;
-    margin-bottom: 5px;
-    font-weight: normal;
-}
-
-.modal-lg {
-    width: 90%;
-    max-width: 900px;
-}
-
-#selection-mode-panel {
-    border-left: 4px solid #17a2b8;
-    background-color: #e7f3ff;
-}
-
-.btn-group .btn {
-    margin-right: 5px;
-}
-
-.alert {
-    border: none;
+.calendar-container {
+    background: white;
     border-radius: 8px;
-}
-
-.panel {
-    border-radius: 8px;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-}
-
-.label {
-    display: inline-block;
-    width: 15px;
-    height: 15px;
-    margin-right: 5px;
-    border-radius: 3px;
-}
-
-.fc-toolbar {
+    padding: 20px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
     margin-bottom: 20px;
 }
 
-.checkbox-inline {
-    margin-right: 15px;
+.calendar-toolbar {
+    background: #f8f9fa;
+    padding: 15px;
+    border-radius: 8px;
+    margin-bottom: 20px;
+    border-left: 4px solid #007bff;
 }
+
+.calendar-legend {
+    margin-top: 20px;
+    padding: 15px;
+    background: #f8f9fa;
+    border-radius: 8px;
+}
+
+.legend-items {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 20px;
+}
+
+.legend-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.legend-color {
+    width: 16px;
+    height: 16px;
+    border-radius: 3px;
+    display: inline-block;
+}
+
+.metric-number {
+    font-weight: bold;
+    margin-bottom: 5px;
+}
+
+.metric-label {
+    font-size: 0.9em;
+    color: #666;
+}
+
+.checkbox-group {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+.panel-heading-action {
+    float: right;
+}
+
+#calendar {
+    min-height: 600px;
+}
+
+.fc-event {
+    cursor: pointer;
+    border: none !important;
+    font-size: 12px;
+}
+
+.fc-event-title {
+    font-weight: 600;
+}
+
+.fc-daygrid-event {
+    margin-bottom: 2px;
+}
+
+.availability-available { background-color: #28a745 !important; }
+.availability-partial { background-color: #ffc107 !important; }
+.availability-full { background-color: #dc3545 !important; }
+.availability-inactive { background-color: #6c757d !important; }
 </style>
