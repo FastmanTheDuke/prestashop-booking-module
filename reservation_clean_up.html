@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Nettoyage automatique des réservations</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .header {
+            background-color: #f8f9fa;
+            padding: 20px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+        }
+        .alert {
+            padding: 15px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+        }
+        .alert-info {
+            background-color: #d1ecf1;
+            border-color: #bee5eb;
+            color: #0c5460;
+        }
+        .stats-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        .stats-table th,
+        .stats-table td {
+            padding: 10px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+        .stats-table th {
+            background-color: #f8f9fa;
+            font-weight: bold;
+        }
+        .footer {
+            margin-top: 30px;
+            padding-top: 20px;
+            border-top: 1px solid #eee;
+            font-size: 12px;
+            color: #666;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h2>🧹 Nettoyage automatique des réservations</h2>
+        <p><strong>Boutique :</strong> {shop_name}</p>
+        <p><strong>Date :</strong> {date}</p>
+    </div>
+
+    <div class="alert alert-info">
+        <strong>Résumé :</strong> {expired_count} réservation(s) ont été marquées comme expirées lors du nettoyage automatique.
+    </div>
+
+    <h3>📊 Détails</h3>
+    <p>
+        Les réservations restées en statut "Demande de réservation" pendant plus de 24 heures 
+        ont été automatiquement marquées comme expirées pour libérer les créneaux.
+    </p>
+
+    <h4>Actions automatiques effectuées :</h4>
+    <ul>
+        <li>✅ Vérification des demandes de réservation anciennes</li>
+        <li>⏰ Marquage comme expirées des demandes > 24h</li>
+        <li>🔄 Libération des créneaux horaires</li>
+        <li>📝 Mise à jour des statuts dans la base de données</li>
+    </ul>
+
+    <h4>🎯 Recommandations :</h4>
+    <ul>
+        <li>Vérifiez régulièrement les nouvelles demandes de réservation</li>
+        <li>Traitez rapidement les demandes en attente</li>
+        <li>Configurez des notifications pour les nouvelles demandes</li>
+        <li>Surveillez les statistiques de réservation</li>
+    </ul>
+
+    <div class="footer">
+        <p>
+            <strong>Note :</strong> Ce message est généré automatiquement par le système de réservations.
+            Pour désactiver ces notifications ou modifier la fréquence de nettoyage, 
+            rendez-vous dans la configuration du module.
+        </p>
+        <p>
+            <a href="{admin_url}">Accéder à l'administration</a> | 
+            <a href="{reservations_url}">Voir les réservations</a>
+        </p>
+    </div>
+</body>
+</html>
