@@ -18,7 +18,7 @@ class AdminBookerController extends ModuleAdminController
         $this->className = 'Booker';
         $this->_defaultOrderBy = 'id_booker';
         $this->_defaultOrderWay = 'DESC';
-        $this->lang = true;
+        $this->lang = false; // CORRECTION: Désactiver le support multilingue
         $this->allow_export = true;
 		
         $this->fields_list = array(
@@ -186,11 +186,11 @@ class AdminBookerController extends ModuleAdminController
                 ),
                 array(
                     'type' => 'textarea',
-                    'label' => 'Description (multilingue)',
+                    'label' => 'Description',
                     'name' => 'description',
                     'cols' => 60,
                     'required' => false,
-                    'lang' => true,
+                    'lang' => false,
                     'rows' => 6,
                     'class' => 'rte',
                     'autoload_rte' => true,
