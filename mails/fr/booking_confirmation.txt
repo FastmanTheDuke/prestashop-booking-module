@@ -1,0 +1,136 @@
+# booking/mails/fr/booking_confirmation.txt
+
+DEMANDE DE RÉSERVATION REÇUE
+=============================
+
+Bonjour {firstname} {lastname},
+
+Nous avons bien reçu votre demande de réservation. Voici le récapitulatif :
+
+DÉTAILS DE LA RÉSERVATION
+--------------------------
+Numéro de réservation : #{booking_reference}
+Élément réservé : {booker_name}
+Date(s) : {booking_dates}
+Créneaux horaires : {time_slots}
+Prix total : {total_price}€
+Statut : EN ATTENTE DE VALIDATION
+
+VOS INFORMATIONS DE CONTACT
+----------------------------
+Email : {customer_email}
+Téléphone : {customer_phone}
+
+{if $customer_message}
+VOTRE MESSAGE
+-------------
+"{customer_message}"
+{/if}
+
+PROCHAINES ÉTAPES
+-----------------
+1. Nous examinerons votre demande dans les plus brefs délais
+2. Vous recevrez un email de confirmation ou de modification
+3. Si acceptée, vous pourrez procéder au paiement
+4. Votre réservation sera alors définitivement confirmée
+
+IMPORTANT : Cette demande n'est pas encore confirmée. Nous vous contacterons rapidement pour finaliser votre réservation.
+
+Suivre votre réservation : {tracking_url}
+
+---
+{shop_name}
+{shop_address}
+Tél : {shop_phone}
+Email : {shop_email}
+Site : {shop_url}
+
+# booking/mails/fr/booking_confirmed.txt
+
+RÉSERVATION CONFIRMÉE !
+========================
+
+Excellente nouvelle {firstname} {lastname} !
+
+Votre réservation #{booking_reference} a été CONFIRMÉE par notre équipe.
+
+DÉTAILS DE LA RÉSERVATION
+--------------------------
+Numéro de réservation : #{booking_reference}
+Élément réservé : {booker_name}
+Date(s) : {booking_dates}
+Créneaux horaires : {time_slots}
+Prix total : {total_price}€
+Statut : ✅ CONFIRMÉE
+
+{if $requires_payment}
+FINALISATION DU PAIEMENT
+-------------------------
+Pour sécuriser définitivement votre réservation, veuillez procéder au paiement dans les 48 HEURES.
+
+Lien de paiement : {payment_url}
+Montant à payer : {total_price}€
+
+Paiement sécurisé par Stripe. Caution de {deposit_amount}€ incluse (remboursée après utilisation).
+{/if}
+
+INFORMATIONS IMPORTANTES
+------------------------
+- Arrivée : Présentez-vous 15 minutes avant votre créneau
+- Documents : Apportez une pièce d'identité valide
+- Annulation : Possible jusqu'à 24h avant (remboursement intégral)
+- Contact urgence : {emergency_phone}
+
+LIEU DE RENDEZ-VOUS
+-------------------
+{shop_name}
+{shop_address}
+Tél : {shop_phone}
+
+Gérer votre réservation : {tracking_url}
+
+Nous avons hâte de vous accueillir !
+
+---
+{shop_name}
+{shop_address}
+Tél : {shop_phone}
+Email : {shop_email}
+Site : {shop_url}
+
+# booking/mails/fr/booking_cancelled.txt
+
+RÉSERVATION ANNULÉE
+====================
+
+Bonjour {firstname} {lastname},
+
+Nous vous informons que votre réservation #{booking_reference} a été annulée.
+
+DÉTAILS DE LA RÉSERVATION ANNULÉE
+----------------------------------
+Élément : {booker_name}
+Date(s) : {booking_dates}
+Créneaux : {time_slots}
+Montant : {total_price}€
+
+{if $cancellation_reason}
+MOTIF DE L'ANNULATION
+---------------------
+{cancellation_reason}
+{/if}
+
+{if $refund_amount}
+REMBOURSEMENT
+-------------
+Un remboursement de {refund_amount}€ sera effectué sous 3-5 jours ouvrés sur votre mode de paiement original.
+{/if}
+
+Nous espérons pouvoir vous accueillir prochainement !
+
+Voir d'autres créneaux : {shop_url}
+
+---
+{shop_name}
+Tél : {shop_phone}
+Email : {shop_email}

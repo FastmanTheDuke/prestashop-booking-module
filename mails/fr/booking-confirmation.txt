@@ -1,0 +1,52 @@
+================================================================
+                    CONFIRMATION DE RÉSERVATION
+================================================================
+
+Bonjour {customer_firstname} {customer_lastname},
+
+Nous avons le plaisir de vous confirmer que votre réservation a été 
+enregistrée et payée avec succès.
+
+----------------------------------------------------------------
+                     DÉTAILS DE VOTRE RÉSERVATION
+----------------------------------------------------------------
+
+Référence          : {booking_reference}
+Élément réservé     : {booker_name}
+Date               : {reservation_date}
+Horaire            : {reservation_time}
+Montant payé       : {total_amount}
+Statut             : ✅ Confirmée et payée
+
+----------------------------------------------------------------
+                     INSTRUCTIONS IMPORTANTES
+----------------------------------------------------------------
+
+✓ Présentez-vous à l'heure prévue avec votre référence de réservation
+✓ Munissez-vous d'une pièce d'identité valide
+✓ En cas de retard, contactez-nous immédiatement
+✓ La caution sera automatiquement remboursée après utilisation
+✓ Respectez les conditions d'utilisation communiquées
+
+----------------------------------------------------------------
+                          BESOIN D'AIDE ?
+----------------------------------------------------------------
+
+Notre équipe est à votre disposition :
+
+📧 Email : {shop_email}
+🏪 Boutique : {shop_name}
+📞 Urgences : {customer_service_phone}
+
+----------------------------------------------------------------
+
+IMPORTANT : Conservez cet email comme justificatif de votre 
+réservation. Vous pouvez l'imprimer ou le présenter depuis 
+votre mobile.
+
+Merci de nous faire confiance pour vos réservations.
+Nous nous réjouissons de vous accueillir !
+
+{shop_name}
+
+================================================================
