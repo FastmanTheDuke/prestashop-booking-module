@@ -1,5 +1,6 @@
 <?php
 require_once (dirname(__FILE__). '/../../classes/Booker.php');
+require_once (dirname(__FILE__). '/../../classes/BookingProductIntegration.php');
 
 class AdminBookerController extends ModuleAdminController
 {
@@ -31,19 +32,44 @@ class AdminBookerController extends ModuleAdminController
             ),            
             'name' => array(
                 'title' => 'Nom', 
-                'width' => '300', 
+                'width' => '200', 
                 'filter_key' => 'a!name',
                 'remove_onclick' => true
             ),
-            'description' => array(
-                'title' => 'Description', 
-                'width' => '300',
-                'lang' => true,
+            'id_product' => array(
+                'title' => 'Produit lié',
+                'width' => '150',
+                'callback' => 'displayLinkedProduct',
                 'remove_onclick' => true
-            ),				
+            ),
+            'price' => array(
+                'title' => 'Prix', 
+                'width' => '80',
+                'align' => 'center',
+                'suffix' => ' €',
+                'type' => 'price',
+                'remove_onclick' => true
+            ),
+            'capacity' => array(
+                'title' => 'Capacité', 
+                'width' => '60',
+                'align' => 'center',
+                'remove_onclick' => true
+            ),
+            'booking_duration' => array(
+                'title' => 'Durée (min)', 
+                'width' => '80',
+                'align' => 'center',
+                'remove_onclick' => true
+            ),
+            'location' => array(
+                'title' => 'Lieu', 
+                'width' => '150',
+                'remove_onclick' => true
+            ),
             'google_account' => array(
                 'title' => 'Compte Google', 
-                'width' => '200',
+                'width' => '180',
                 'remove_onclick' => true
             ),
             'date_add' => array(
@@ -77,6 +103,10 @@ class AdminBookerController extends ModuleAdminController
             'disable' => array(
                 'text' => 'Désactiver sélectionnés',
                 'icon' => 'icon-power-off'
+            ),
+            'sync_products' => array(
+                'text' => 'Synchroniser avec produits',
+                'icon' => 'icon-refresh'
             )
         );
         
@@ -90,11 +120,44 @@ class AdminBookerController extends ModuleAdminController
         parent::__construct();
     }
     
+    /**
+     * Afficher le produit lié
+     */
+    public function displayLinkedProduct($id_product, $row)
+    {
+        if (!$id_product || $id_product == 0) {
+            return '<span class="label label-warning">Aucun produit</span>';
+        }
+        
+        $product = new Product($id_product, false, $this->context->language->id);
+        if (!Validate::isLoadedObject($product)) {
+            return '<span class="label label-danger">Produit introuvable</span>';
+        }
+        
+        $product_url = $this->context->link->getAdminLink('AdminProducts') . '&id_product=' . $id_product . '&updateproduct';
+        
+        return '<a href="' . $product_url . '" target="_blank" class="btn btn-default btn-xs">
+                    <i class="icon-external-link"></i> ' . Tools::truncate($product->name, 30) . '
+                </a>';
+    }
+    
     public function renderForm()
     {
         $this->display = 'edit';
         $this->initToolbar();
 		
+        // Récupérer les produits disponibles
+        $products = Product::getProducts($this->context->language->id, 0, 0, 'id_product', 'ASC', false, true);
+        $products_options = array();
+        $products_options[] = array('id' => 0, 'name' => '-- Créer un nouveau produit automatiquement --');
+        
+        foreach ($products as $product) {
+            $products_options[] = array(
+                'id' => $product['id_product'],
+                'name' => '[' . $product['id_product'] . '] ' . $product['name']
+            );
+        }
+        
         $this->fields_form = array(
             'legend' => array(
                 'title' => $this->module->l('Gérer l\'élément à réserver'),
@@ -108,6 +171,18 @@ class AdminBookerController extends ModuleAdminController
                     'id' => 'name', 
                     'required' => true,
                     'size' => 50,
+                    'hint' => 'Nom de l\'élément à réserver (bateau, salle, équipement...)'
+                ),
+                array(
+                    'type' => 'select',
+                    'label' => 'Produit PrestaShop associé',
+                    'name' => 'id_product',
+                    'options' => array(
+                        'query' => $products_options,
+                        'id' => 'id',
+                        'name' => 'name'
+                    ),
+                    'hint' => 'Sélectionnez un produit existant ou laissez vide pour en créer un automatiquement'
                 ),
                 array(
                     'type' => 'textarea',
@@ -116,10 +191,86 @@ class AdminBookerController extends ModuleAdminController
                     'cols' => 60,
                     'required' => false,
                     'lang' => true,
-                    'rows' => 10,
+                    'rows' => 6,
                     'class' => 'rte',
                     'autoload_rte' => true,
                     'hint' => 'Description détaillée de l\'élément à réserver',
+                ),
+                array(
+                    'type' => 'text',
+                    'label' => 'Lieu/Emplacement',
+                    'name' => 'location',
+                    'size' => 50,
+                    'hint' => 'Localisation physique de l\'élément (port, salle, adresse...)'
+                ),
+                array(
+                    'type' => 'text',
+                    'label' => 'Prix de base',
+                    'name' => 'price',
+                    'suffix' => '€',
+                    'class' => 'fixed-width-sm',
+                    'hint' => 'Prix de base pour une réservation standard'
+                ),
+                array(
+                    'type' => 'text',
+                    'label' => 'Capacité maximale',
+                    'name' => 'capacity',
+                    'class' => 'fixed-width-sm',
+                    'hint' => 'Nombre maximum de personnes/réservations simultanées'
+                ),
+                array(
+                    'type' => 'text',
+                    'label' => 'Durée par défaut (minutes)',
+                    'name' => 'booking_duration',
+                    'class' => 'fixed-width-sm',
+                    'suffix' => 'min',
+                    'hint' => 'Durée standard d\'une réservation en minutes'
+                ),
+                array(
+                    'type' => 'text',
+                    'label' => 'Délai minimum de réservation (heures)',
+                    'name' => 'min_booking_time',
+                    'class' => 'fixed-width-sm',
+                    'suffix' => 'h',
+                    'hint' => 'Délai minimum entre la réservation et l\'utilisation'
+                ),
+                array(
+                    'type' => 'text',
+                    'label' => 'Réservation maximum à l\'avance (jours)',
+                    'name' => 'max_booking_days',
+                    'class' => 'fixed-width-sm',
+                    'suffix' => 'jours',
+                    'hint' => 'Nombre maximum de jours à l\'avance pour réserver'
+                ),
+                array(
+                    'type' => 'switch',
+                    'label' => 'Caution requise',
+                    'name' => 'deposit_required',
+                    'is_bool' => true,
+                    'values' => array(
+                        array('id' => 'deposit_on', 'value' => 1, 'label' => 'Oui'),
+                        array('id' => 'deposit_off', 'value' => 0, 'label' => 'Non')
+                    ),
+                    'hint' => 'Une caution sera-t-elle demandée pour les réservations ?'
+                ),
+                array(
+                    'type' => 'text',
+                    'label' => 'Montant de la caution',
+                    'name' => 'deposit_amount',
+                    'suffix' => '€',
+                    'class' => 'fixed-width-sm',
+                    'hint' => 'Montant fixe de la caution (laisser vide pour un pourcentage du prix)'
+                ),
+                array(
+                    'type' => 'switch',
+                    'label' => 'Confirmation automatique',
+                    'name' => 'auto_confirm',
+                    'is_bool' => true,
+                    'values' => array(
+                        array('id' => 'auto_on', 'value' => 1, 'label' => 'Oui'),
+                        array('id' => 'auto_off', 'value' => 0, 'label' => 'Non')
+                    ),
+                    'hint' => 'Les réservations seront-elles confirmées automatiquement ?'
                 ),
                 array(
                     'type' => 'text',
@@ -136,16 +287,8 @@ class AdminBookerController extends ModuleAdminController
                     'required' => false,
                     'is_bool' => true,
                     'values' => array(
-                        array(
-                            'id' => 'active_on',
-                            'value' => 1,
-                            'label' => 'Oui'
-                        ), 
-                        array(
-                            'id' => 'active_off',
-                            'value' => 0,
-                            'label' => 'Non'
-                        )
+                        array('id' => 'active_on', 'value' => 1, 'label' => 'Oui'), 
+                        array('id' => 'active_off', 'value' => 0, 'label' => 'Non')
                     ),
                 )
             ),
@@ -156,12 +299,112 @@ class AdminBookerController extends ModuleAdminController
     }
     
     /**
+     * Traitement avant sauvegarde
+     */
+    public function processSave()
+    {
+        $id_booker = (int)Tools::getValue('id_booker');
+        $id_product = (int)Tools::getValue('id_product');
+        
+        // Traitement standard
+        $result = parent::processSave();
+        
+        if ($result) {
+            // Récupérer l'objet créé/modifié
+            if ($id_booker) {
+                $booker = new Booker($id_booker);
+            } else {
+                // Nouveau booker, récupérer le dernier créé
+                $last_id = Db::getInstance()->Insert_ID();
+                $booker = new Booker($last_id);
+            }
+            
+            if (Validate::isLoadedObject($booker)) {
+                // Gestion de l'intégration produit
+                if ($id_product == 0) {
+                    // Créer un nouveau produit automatiquement
+                    $new_product_id = BookingProductIntegration::createProductForBooker($booker);
+                    if ($new_product_id) {
+                        $booker->id_product = $new_product_id;
+                        $booker->update();
+                        $this->confirmations[] = 'Produit PrestaShop créé automatiquement (ID: ' . $new_product_id . ')';
+                    }
+                } else {
+                    // Lier au produit existant
+                    $booker->id_product = $id_product;
+                    $booker->update();
+                    $this->confirmations[] = 'Élément lié au produit PrestaShop (ID: ' . $id_product . ')';
+                }
+                
+                // Synchroniser les données avec le produit
+                if ($booker->id_product) {
+                    $booker->syncWithProduct();
+                }
+            }
+        }
+        
+        return $result;
+    }
+    
+    /**
+     * Traitement des actions en lot
+     */
+    public function processBulkSyncProducts()
+    {
+        $booker_ids = Tools::getValue('bookerBox');
+        if (!is_array($booker_ids) || empty($booker_ids)) {
+            $this->errors[] = 'Aucun élément sélectionné';
+            return;
+        }
+        
+        $synced = 0;
+        foreach ($booker_ids as $id_booker) {
+            $booker = new Booker((int)$id_booker);
+            if (Validate::isLoadedObject($booker)) {
+                if (!$booker->id_product) {
+                    // Créer un produit si aucun n'existe
+                    $product_id = BookingProductIntegration::createProductForBooker($booker);
+                    if ($product_id) {
+                        $booker->id_product = $product_id;
+                        $booker->update();
+                        $synced++;
+                    }
+                } else {
+                    // Synchroniser avec le produit existant
+                    if ($booker->syncWithProduct()) {
+                        $synced++;
+                    }
+                }
+            }
+        }
+        
+        $this->confirmations[] = $synced . ' élément(s) synchronisé(s) avec les produits PrestaShop';
+    }
+    
+    /**
      * Ajout d'un booker
      */
     public function processAdd()
     {
         $object = new $this->className();
         $this->copyFromPost($object, $this->table);
+        
+        // Valeurs par défaut
+        if (!$object->price || $object->price <= 0) {
+            $object->price = Configuration::get('BOOKING_DEFAULT_PRICE', 50.00);
+        }
+        if (!$object->capacity || $object->capacity <= 0) {
+            $object->capacity = 1;
+        }
+        if (!$object->booking_duration || $object->booking_duration <= 0) {
+            $object->booking_duration = 60;
+        }
+        if (!$object->min_booking_time) {
+            $object->min_booking_time = Configuration::get('BOOKING_MIN_BOOKING_TIME', 24);
+        }
+        if (!$object->max_booking_days) {
+            $object->max_booking_days = Configuration::get('BOOKING_MAX_BOOKING_DAYS', 30);
+        }
         
         // Ajouter les dates de création/modification
         $object->date_add = date('Y-m-d H:i:s');
@@ -209,16 +452,77 @@ class AdminBookerController extends ModuleAdminController
             'icon' => 'process-icon-new'
         );
         
+        $this->page_header_toolbar_btn['sync_all'] = array(
+            'href' => self::$currentIndex . '&syncAllProducts&token=' . $this->token,
+            'desc' => 'Synchroniser tous les éléments avec les produits',
+            'icon' => 'process-icon-refresh'
+        );
+        
         parent::initPageHeaderToolbar();
+    }
+    
+    /**
+     * Synchroniser tous les bookers avec les produits
+     */
+    public function processSyncAllProducts()
+    {
+        try {
+            $synced = BookingProductIntegration::syncAllBookers();
+            $this->confirmations[] = $synced . ' élément(s) synchronisé(s) avec les produits PrestaShop';
+        } catch (Exception $e) {
+            $this->errors[] = 'Erreur lors de la synchronisation: ' . $e->getMessage();
+        }
+        
+        return true;
     }
     
     public function renderList()
     {
+        // Ajouter des informations contextuelles
+        $total_bookers = Db::getInstance()->getValue('SELECT COUNT(*) FROM `' . _DB_PREFIX_ . 'booker`');
+        $active_bookers = Db::getInstance()->getValue('SELECT COUNT(*) FROM `' . _DB_PREFIX_ . 'booker` WHERE active = 1');
+        $linked_products = Db::getInstance()->getValue('SELECT COUNT(*) FROM `' . _DB_PREFIX_ . 'booker` WHERE id_product > 0');
+        
+        $info_panel = '
+        <div class="panel">
+            <div class="panel-heading">
+                <i class="icon-info"></i> Statistiques des éléments à réserver
+            </div>
+            <div class="panel-body">
+                <div class="row">
+                    <div class="col-lg-3">
+                        <div class="alert alert-info text-center">
+                            <div style="font-size: 2em; font-weight: bold;">' . $total_bookers . '</div>
+                            <div>Total éléments</div>
+                        </div>
+                    </div>
+                    <div class="col-lg-3">
+                        <div class="alert alert-success text-center">
+                            <div style="font-size: 2em; font-weight: bold;">' . $active_bookers . '</div>
+                            <div>Éléments actifs</div>
+                        </div>
+                    </div>
+                    <div class="col-lg-3">
+                        <div class="alert alert-warning text-center">
+                            <div style="font-size: 2em; font-weight: bold;">' . $linked_products . '</div>
+                            <div>Produits liés</div>
+                        </div>
+                    </div>
+                    <div class="col-lg-3">
+                        <div class="alert alert-default text-center">
+                            <div style="font-size: 2em; font-weight: bold;">' . ($total_bookers - $linked_products) . '</div>
+                            <div>Sans produit</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>';
+        
         $list = parent::renderList();	
-        $this->context->smarty->assign(array(		  
+        $this->context->smarty->assign(array(	  
             'ajaxUrl' => $this->context->link->getAdminLink('AdminBooker')
         ));
         $content = $this->context->smarty->fetch($this->getTemplatePath().'ajax.tpl');
-        return $list . $content;
+        return $info_panel . $list . $content;
     }
 }
