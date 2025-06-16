@@ -1,7 +1,7 @@
 <?php
 /**
  * Contrôleur pour le calendrier de gestion des réservations
- * Nouveau contrôleur dédié séparé des disponibilités
+ * Interface calendrier dédiée à la visualisation et gestion des réservations clients
  */
 
 require_once(dirname(__FILE__) . '/../../classes/Booker.php');
@@ -10,586 +10,637 @@ require_once(dirname(__FILE__) . '/../../classes/BookerAuthReserved.php');
 
 class AdminBookerCalendarReservationsController extends ModuleAdminController
 {
+    protected $_module = NULL;
+    public $controller_type = 'admin';
+
     public function __construct()
     {
         $this->display = 'view';
+        $this->context = Context::getContext();
         $this->bootstrap = true;
-        parent::__construct();
+        $this->table = 'booker_auth_reserved';
+        $this->identifier = 'id_reserved';
+        $this->className = 'BookerAuthReserved';
+        $this->meta_title = 'Calendrier des Réservations';
         
-        $this->context->smarty->assign([
-            'page_title' => $this->l('Calendrier des Réservations'),
-            'page_subtitle' => $this->l('Gérer et valider les réservations clients')
-        ]);
+        parent::__construct();
     }
 
     /**
-     * Rendu de la vue principale
+     * Initialisation du contenu principal
+     */
+    public function initContent()
+    {
+        // Charger les ressources nécessaires
+        $this->addCSS([
+            'https://cdnjs.cloudflare.com/ajax/libs/fullcalendar/6.1.8/main.min.css',
+            $this->module->getPathUri() . 'views/css/admin-calendar.css'
+        ]);
+        
+        $this->addJS([
+            'https://cdnjs.cloudflare.com/ajax/libs/fullcalendar/6.1.8/index.global.min.js',
+            'https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.29.4/moment.min.js',
+            $this->module->getPathUri() . 'views/js/reservation-calendar.js'
+        ]);
+
+        // Récupérer les bookers actifs
+        $bookers = $this->getActiveBookers();
+        
+        // Récupérer les statuts de réservations
+        $statuses = $this->getReservationStatuses();
+        
+        // Paramètres de configuration du calendrier
+        $calendar_config = [
+            'firstDay' => Configuration::get('BOOKING_CALENDAR_FIRST_DAY', 1),
+            'minTime' => Configuration::get('BOOKING_CALENDAR_MIN_TIME', '08:00'),
+            'maxTime' => Configuration::get('BOOKING_CALENDAR_MAX_TIME', '20:00'),
+            'slotDuration' => Configuration::get('BOOKING_SLOT_DURATION', '00:30:00'),
+            'businessHours' => [
+                'startTime' => Configuration::get('BOOKING_BUSINESS_HOURS_START', '08:00'),
+                'endTime' => Configuration::get('BOOKING_BUSINESS_HOURS_END', '18:00'),
+                'daysOfWeek' => explode(',', Configuration::get('BOOKING_ALLOWED_DAYS', '1,2,3,4,5,6,7'))
+            ]
+        ];
+
+        $this->context->smarty->assign([
+            'bookers' => $bookers,
+            'statuses' => $statuses,
+            'calendar_config' => $calendar_config,
+            'ajax_url' => $this->context->link->getAdminLink('AdminBookerCalendarReservations'),
+            'current_index' => self::$currentIndex,
+            'token' => $this->token,
+            'module_path' => $this->module->getPathUri(),
+            'can_edit' => true,
+            'calendar_type' => 'reservations'
+        ]);
+
+        parent::initContent();
+    }
+
+    /**
+     * Rendu de la vue du calendrier
      */
     public function renderView()
     {
-        try {
-            // Chargement des ressources FullCalendar
-            $this->context->controller->addJS('https://cdnjs.cloudflare.com/ajax/libs/fullcalendar/6.1.8/index.global.min.js');
-            $this->context->controller->addJS('https://cdnjs.cloudflare.com/ajax/libs/fullcalendar/6.1.8/locales-all.global.min.js');
-            
-            // Scripts et styles locaux
-            $this->addJS(_MODULE_DIR_ . $this->module->name . '/js/calendar-reservations.js');
-            $this->addCSS(_MODULE_DIR_ . $this->module->name . '/css/admin-calendar-reservations.css');
-            
-            // Récupération des bookers actifs
-            $bookers = $this->getActiveBookers();
-            
-            // Statuts des réservations
-            $statuses = BookerAuthReserved::getStatuses();
-            
-            // URLs AJAX pour les actions
-            $ajax_urls = [
-                'get_reservations' => $this->context->link->getAdminLink('AdminBookerCalendarReservations') . '&ajax=1&action=getReservations',
-                'update_status' => $this->context->link->getAdminLink('AdminBookerCalendarReservations') . '&ajax=1&action=updateStatus',
-                'validate_reservation' => $this->context->link->getAdminLink('AdminBookerCalendarReservations') . '&ajax=1&action=validateReservation',
-                'cancel_reservation' => $this->context->link->getAdminLink('AdminBookerCalendarReservations') . '&ajax=1&action=cancelReservation',
-                'create_order' => $this->context->link->getAdminLink('AdminBookerCalendarReservations') . '&ajax=1&action=createOrder',
-                'bulk_validate' => $this->context->link->getAdminLink('AdminBookerCalendarReservations') . '&ajax=1&action=bulkValidate',
-                'bulk_cancel' => $this->context->link->getAdminLink('AdminBookerCalendarReservations') . '&ajax=1&action=bulkCancel',
-                'send_notification' => $this->context->link->getAdminLink('AdminBookerCalendarReservations') . '&ajax=1&action=sendNotification'
-            ];
-            
-            // Configuration JavaScript
-            Media::addJSDef([
-                'ReservationCalendar' => [
-                    'config' => [
-                        'locale' => $this->context->language->iso_code,
-                        'business_hours' => [
-                            'daysOfWeek' => explode(',', Configuration::get('BOOKING_ALLOWED_DAYS') ?: '1,2,3,4,5,6'),
-                            'startTime' => Configuration::get('BOOKING_BUSINESS_HOURS_START') ?: '08:00',
-                            'endTime' => Configuration::get('BOOKING_BUSINESS_HOURS_END') ?: '18:00'
-                        ],
-                        'selectable' => false, // Pas de sélection sur le calendrier des réservations
-                        'selectMirror' => false,
-                        'dayMaxEvents' => true,
-                        'weekends' => true,
-                        'eventClick' => true,
-                        'eventMouseEnter' => true
-                    ],
-                    'ajax_urls' => $ajax_urls,
-                    'bookers' => $bookers,
-                    'statuses' => $statuses,
-                    'current_date' => date('Y-m-d'),
-                    'texts' => [
-                        'loading' => $this->l('Chargement...'),
-                        'no_events' => $this->l('Aucune réservation'),
-                        'reservation_details' => $this->l('Détails de la réservation'),
-                        'validate_reservation' => $this->l('Valider la réservation'),
-                        'cancel_reservation' => $this->l('Annuler la réservation'),
-                        'create_order' => $this->l('Créer la commande'),
-                        'send_notification' => $this->l('Envoyer une notification'),
-                        'bulk_validate_confirm' => $this->l('Valider les réservations sélectionnées ?'),
-                        'bulk_cancel_confirm' => $this->l('Annuler les réservations sélectionnées ?'),
-                        'validate_confirm' => $this->l('Confirmer la validation de cette réservation ?'),
-                        'cancel_confirm' => $this->l('Confirmer l\'annulation de cette réservation ?'),
-                        'save' => $this->l('Enregistrer'),
-                        'cancel' => $this->l('Annuler'),
-                        'validate' => $this->l('Valider'),
-                        'customer' => $this->l('Client'),
-                        'phone' => $this->l('Téléphone'),
-                        'email' => $this->l('Email'),
-                        'status' => $this->l('Statut'),
-                        'total_price' => $this->l('Prix total'),
-                        'deposit_paid' => $this->l('Caution versée'),
-                        'notes' => $this->l('Notes client'),
-                        'admin_notes' => $this->l('Notes admin'),
-                        'booking_reference' => $this->l('Référence'),
-                        'date_reserved' => $this->l('Date de réservation'),
-                        'date_expiry' => $this->l('Date d\'expiration')
-                    ]
-                ]
-            ]);
-            
-            // Variables Smarty
-            $this->context->smarty->assign([
-                'bookers' => $bookers,
-                'statuses' => $statuses,
-                'ajax_urls' => $ajax_urls,
-                'current_date' => date('Y-m-d'),
-                'module_dir' => _MODULE_DIR_ . $this->module->name . '/',
-                'reservation_stats' => $this->getReservationStats()
-            ]);
-            
-            $template_path = _PS_MODULE_DIR_ . $this->module->name . '/views/templates/admin/calendar_reservations.tpl';
-            
-            if (file_exists($template_path)) {
-                return $this->context->smarty->fetch($template_path);
-            } else {
-                return $this->generateDefaultView();
-            }
-            
-        } catch (Exception $e) {
-            PrestaShopLogger::addLog('AdminBookerCalendarReservations::renderView() - Erreur: ' . $e->getMessage(), 3);
-            return $this->displayError($this->l('Erreur lors du chargement du calendrier des réservations'));
+        $template_path = $this->module->getLocalPath() . 'views/templates/admin/calendar_reservations.tpl';
+        
+        if (!file_exists($template_path)) {
+            // Créer le template de base si il n'existe pas
+            $this->createDefaultTemplate();
         }
+        
+        return $this->context->smarty->fetch($template_path);
     }
-    
+
     /**
-     * Récupération des bookers actifs
+     * Récupérer les bookers actifs
      */
     private function getActiveBookers()
     {
-        try {
-            $sql = 'SELECT b.*, p.reference as product_reference, pl.name as product_name 
-                    FROM `' . _DB_PREFIX_ . 'booker` b
-                    LEFT JOIN `' . _DB_PREFIX_ . 'product` p ON b.id_product = p.id_product
-                    LEFT JOIN `' . _DB_PREFIX_ . 'product_lang` pl ON (p.id_product = pl.id_product AND pl.id_lang = ' . (int)$this->context->language->id . ')
-                    WHERE b.active = 1
-                    ORDER BY b.name ASC';
-                    
-            $results = Db::getInstance()->executeS($sql);
-            
-            $bookers = [];
-            foreach ($results as $row) {
-                $bookers[] = [
-                    'id_booker' => (int)$row['id_booker'],
-                    'id_product' => (int)$row['id_product'],
-                    'name' => $row['name'] ?: $row['product_name'],
-                    'description' => $row['description'],
-                    'location' => $row['location'],
-                    'capacity' => (int)$row['capacity'],
-                    'price' => (float)$row['price'],
-                    'product_reference' => $row['product_reference']
-                ];
-            }
-            
-            return $bookers;
-            
-        } catch (Exception $e) {
-            PrestaShopLogger::addLog('AdminBookerCalendarReservations::getActiveBookers() - Erreur: ' . $e->getMessage(), 3);
-            return [];
-        }
+        return Db::getInstance()->executeS('
+            SELECT b.id_booker, b.name, b.location, b.price, b.capacity
+            FROM `' . _DB_PREFIX_ . 'booker` b
+            WHERE b.active = 1
+            ORDER BY b.sort_order ASC, b.name ASC
+        ');
     }
-    
+
     /**
-     * Statistiques des réservations
+     * Récupérer les statuts de réservations
      */
-    private function getReservationStats()
+    private function getReservationStatuses()
     {
-        try {
-            return [
-                'pending' => (int)Db::getInstance()->getValue('SELECT COUNT(*) FROM `' . _DB_PREFIX_ . 'booker_auth_reserved` WHERE status = 0'),
-                'validated' => (int)Db::getInstance()->getValue('SELECT COUNT(*) FROM `' . _DB_PREFIX_ . 'booker_auth_reserved` WHERE status = 1'),
-                'paid' => (int)Db::getInstance()->getValue('SELECT COUNT(*) FROM `' . _DB_PREFIX_ . 'booker_auth_reserved` WHERE status = 2'),
-                'cancelled' => (int)Db::getInstance()->getValue('SELECT COUNT(*) FROM `' . _DB_PREFIX_ . 'booker_auth_reserved` WHERE status = 3'),
-                'expired' => (int)Db::getInstance()->getValue('SELECT COUNT(*) FROM `' . _DB_PREFIX_ . 'booker_auth_reserved` WHERE status = 4'),
-                'today' => (int)Db::getInstance()->getValue('SELECT COUNT(*) FROM `' . _DB_PREFIX_ . 'booker_auth_reserved` WHERE DATE(date_start) = CURDATE()'),
-                'upcoming' => (int)Db::getInstance()->getValue('SELECT COUNT(*) FROM `' . _DB_PREFIX_ . 'booker_auth_reserved` WHERE date_start > NOW() AND status IN (1,2)')
+        return [
+            0 => ['label' => 'En attente', 'color' => '#ffc107'],
+            1 => ['label' => 'Acceptée', 'color' => '#28a745'],
+            2 => ['label' => 'En attente de paiement', 'color' => '#17a2b8'],
+            3 => ['label' => 'Payée', 'color' => '#007bff'],
+            4 => ['label' => 'Annulée', 'color' => '#dc3545'],
+            5 => ['label' => 'Expirée', 'color' => '#6c757d'],
+            6 => ['label' => 'Terminée', 'color' => '#343a40'],
+            7 => ['label' => 'Remboursée', 'color' => '#fd7e14']
+        ];
+    }
+
+    /**
+     * AJAX : Récupérer les réservations pour le calendrier
+     */
+    public function ajaxProcessGetReservations()
+    {
+        $id_booker = (int)Tools::getValue('id_booker');
+        $status_filter = Tools::getValue('status_filter');
+        $start = Tools::getValue('start');
+        $end = Tools::getValue('end');
+        
+        $sql = 'SELECT 
+            r.id_reserved,
+            r.id_booker,
+            r.booking_reference,
+            r.customer_firstname,
+            r.customer_lastname,
+            r.customer_email,
+            r.customer_phone,
+            r.date_reserved,
+            r.date_to,
+            r.hour_from,
+            r.hour_to,
+            r.total_price,
+            r.deposit_paid,
+            r.status,
+            r.payment_status,
+            r.notes,
+            r.admin_notes,
+            b.name as booker_name,
+            b.location as booker_location
+        FROM `' . _DB_PREFIX_ . 'booker_auth_reserved` r
+        LEFT JOIN `' . _DB_PREFIX_ . 'booker` b ON (r.id_booker = b.id_booker)
+        WHERE DATE(r.date_reserved) >= "' . pSQL($start) . '"
+        AND DATE(COALESCE(r.date_to, r.date_reserved)) <= "' . pSQL($end) . '"';
+        
+        if ($id_booker > 0) {
+            $sql .= ' AND r.id_booker = ' . (int)$id_booker;
+        }
+        
+        if ($status_filter !== '' && $status_filter !== null) {
+            $sql .= ' AND r.status = ' . (int)$status_filter;
+        }
+        
+        $sql .= ' ORDER BY r.date_reserved ASC, r.hour_from ASC';
+        
+        $reservations = Db::getInstance()->executeS($sql);
+        $events = [];
+        $statuses = $this->getReservationStatuses();
+        
+        foreach ($reservations as $reservation) {
+            $start_datetime = $reservation['date_reserved'] . 'T' . sprintf('%02d:00:00', $reservation['hour_from']);
+            $end_datetime = ($reservation['date_to'] ?: $reservation['date_reserved']) . 'T' . sprintf('%02d:00:00', $reservation['hour_to']);
+            
+            $status_info = $statuses[$reservation['status']] ?? ['label' => 'Inconnu', 'color' => '#6c757d'];
+            
+            $events[] = [
+                'id' => 'res_' . $reservation['id_reserved'],
+                'title' => $reservation['customer_firstname'] . ' ' . $reservation['customer_lastname'] . ' - ' . $reservation['booker_name'],
+                'start' => $start_datetime,
+                'end' => $end_datetime,
+                'backgroundColor' => $status_info['color'],
+                'borderColor' => $this->getReservationBorderColor($reservation),
+                'textColor' => '#ffffff',
+                'extendedProps' => [
+                    'type' => 'reservation',
+                    'id_reserved' => $reservation['id_reserved'],
+                    'id_booker' => $reservation['id_booker'],
+                    'booking_reference' => $reservation['booking_reference'],
+                    'booker_name' => $reservation['booker_name'],
+                    'booker_location' => $reservation['booker_location'],
+                    'customer_name' => $reservation['customer_firstname'] . ' ' . $reservation['customer_lastname'],
+                    'customer_email' => $reservation['customer_email'],
+                    'customer_phone' => $reservation['customer_phone'],
+                    'total_price' => $reservation['total_price'],
+                    'deposit_paid' => $reservation['deposit_paid'],
+                    'status' => $reservation['status'],
+                    'status_label' => $status_info['label'],
+                    'payment_status' => $reservation['payment_status'],
+                    'notes' => $reservation['notes'],
+                    'admin_notes' => $reservation['admin_notes']
+                ]
             ];
-        } catch (Exception $e) {
-            PrestaShopLogger::addLog('AdminBookerCalendarReservations - Erreur stats: ' . $e->getMessage(), 3);
-            return [];
         }
+        
+        die(json_encode($events));
     }
-    
+
     /**
-     * Vue par défaut si le template n'existe pas
+     * AJAX : Créer une nouvelle réservation
      */
-    private function generateDefaultView()
+    public function ajaxProcessCreateReservation()
     {
-        $stats = $this->getReservationStats();
-        
-        return '
-        <div class="row">
-            <div class="col-lg-12">
-                <div class="panel">
-                    <div class="panel-heading">
-                        <i class="icon-bar-chart"></i> ' . $this->l('Aperçu des réservations') . '
-                    </div>
-                    <div class="panel-body">
-                        <div class="row">
-                            <div class="col-lg-2 col-md-4 col-sm-6">
-                                <div class="alert alert-warning text-center">
-                                    <div style="font-size: 1.5em; font-weight: bold;">' . ($stats['pending'] ?? 0) . '</div>
-                                    <small>' . $this->l('En attente') . '</small>
-                                </div>
-                            </div>
-                            <div class="col-lg-2 col-md-4 col-sm-6">
-                                <div class="alert alert-info text-center">
-                                    <div style="font-size: 1.5em; font-weight: bold;">' . ($stats['validated'] ?? 0) . '</div>
-                                    <small>' . $this->l('Validées') . '</small>
-                                </div>
-                            </div>
-                            <div class="col-lg-2 col-md-4 col-sm-6">
-                                <div class="alert alert-success text-center">
-                                    <div style="font-size: 1.5em; font-weight: bold;">' . ($stats['paid'] ?? 0) . '</div>
-                                    <small>' . $this->l('Payées') . '</small>
-                                </div>
-                            </div>
-                            <div class="col-lg-2 col-md-4 col-sm-6">
-                                <div class="alert alert-primary text-center">
-                                    <div style="font-size: 1.5em; font-weight: bold;">' . ($stats['today'] ?? 0) . '</div>
-                                    <small>' . $this->l('Aujourd\'hui') . '</small>
-                                </div>
-                            </div>
-                            <div class="col-lg-2 col-md-4 col-sm-6">
-                                <div class="alert alert-default text-center">
-                                    <div style="font-size: 1.5em; font-weight: bold;">' . ($stats['upcoming'] ?? 0) . '</div>
-                                    <small>' . $this->l('À venir') . '</small>
-                                </div>
-                            </div>
-                            <div class="col-lg-2 col-md-4 col-sm-6">
-                                <div class="alert alert-danger text-center">
-                                    <div style="font-size: 1.5em; font-weight: bold;">' . ($stats['cancelled'] ?? 0) . '</div>
-                                    <small>' . $this->l('Annulées') . '</small>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-        
-        <div class="panel">
-            <div class="panel-heading">
-                <i class="icon-calendar"></i> ' . $this->l('Calendrier des Réservations') . '
-            </div>
-            <div class="panel-body">
-                <div class="row">
-                    <div class="col-lg-3">
-                        <div class="form-group">
-                            <label>' . $this->l('Élément réservé') . '</label>
-                            <select id="booker-filter" class="form-control">
-                                <option value="">' . $this->l('Tous les éléments') . '</option>
-                            </select>
-                        </div>
-                        <div class="form-group">
-                            <label>' . $this->l('Statut') . '</label>
-                            <select id="status-filter" class="form-control">
-                                <option value="">' . $this->l('Tous les statuts') . '</option>
-                                <option value="0">' . $this->l('En attente') . '</option>
-                                <option value="1">' . $this->l('Validées') . '</option>
-                                <option value="2">' . $this->l('Payées') . '</option>
-                                <option value="3">' . $this->l('Annulées') . '</option>
-                                <option value="4">' . $this->l('Expirées') . '</option>
-                            </select>
-                        </div>
-                        <div class="form-group">
-                            <button type="button" id="btn-bulk-validate" class="btn btn-success btn-block">
-                                <i class="icon-check"></i> ' . $this->l('Valider les sélectionnées') . '
-                            </button>
-                        </div>
-                        <div class="form-group">
-                            <button type="button" id="btn-bulk-cancel" class="btn btn-danger btn-block">
-                                <i class="icon-remove"></i> ' . $this->l('Annuler les sélectionnées') . '
-                            </button>
-                        </div>
-                        <div class="form-group">
-                            <button type="button" id="btn-refresh" class="btn btn-default btn-block">
-                                <i class="icon-refresh"></i> ' . $this->l('Actualiser') . '
-                            </button>
-                        </div>
-                        
-                        <!-- Légende des couleurs -->
-                        <div class="panel panel-default">
-                            <div class="panel-heading">
-                                <h4 class="panel-title">' . $this->l('Légende') . '</h4>
-                            </div>
-                            <div class="panel-body">
-                                <div class="legend-item">
-                                    <span class="legend-color" style="background-color: #ffc107;"></span>
-                                    ' . $this->l('En attente') . '
-                                </div>
-                                <div class="legend-item">
-                                    <span class="legend-color" style="background-color: #17a2b8;"></span>
-                                    ' . $this->l('Validée') . '
-                                </div>
-                                <div class="legend-item">
-                                    <span class="legend-color" style="background-color: #28a745;"></span>
-                                    ' . $this->l('Payée') . '
-                                </div>
-                                <div class="legend-item">
-                                    <span class="legend-color" style="background-color: #dc3545;"></span>
-                                    ' . $this->l('Annulée') . '
-                                </div>
-                                <div class="legend-item">
-                                    <span class="legend-color" style="background-color: #6c757d;"></span>
-                                    ' . $this->l('Expirée') . '
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="col-lg-9">
-                        <div id="reservations-calendar"></div>
-                    </div>
-                </div>
-            </div>
-        </div>
-        
-        <!-- Modal pour les détails de réservation -->
-        <div class="modal fade" id="reservation-details-modal" tabindex="-1">
-            <div class="modal-dialog modal-lg">
-                <div class="modal-content">
-                    <div class="modal-header">
-                        <button type="button" class="close" data-dismiss="modal">&times;</button>
-                        <h4 class="modal-title">' . $this->l('Détails de la réservation') . '</h4>
-                    </div>
-                    <div class="modal-body">
-                        <div id="reservation-details-content">
-                            <!-- Le contenu sera chargé dynamiquement -->
-                        </div>
-                    </div>
-                    <div class="modal-footer">
-                        <button type="button" class="btn btn-default" data-dismiss="modal">' . $this->l('Fermer') . '</button>
-                        <button type="button" id="btn-validate-reservation" class="btn btn-success">
-                            <i class="icon-check"></i> ' . $this->l('Valider') . '
-                        </button>
-                        <button type="button" id="btn-cancel-reservation" class="btn btn-danger">
-                            <i class="icon-remove"></i> ' . $this->l('Annuler') . '
-                        </button>
-                        <button type="button" id="btn-create-order" class="btn btn-primary">
-                            <i class="icon-shopping-cart"></i> ' . $this->l('Créer commande') . '
-                        </button>
-                    </div>
-                </div>
-            </div>
-        </div>
-        
-        <style>
-        .legend-item {
-            margin-bottom: 5px;
-            font-size: 12px;
+        $id_booker = (int)Tools::getValue('id_booker');
+        $customer_firstname = Tools::getValue('customer_firstname');
+        $customer_lastname = Tools::getValue('customer_lastname');
+        $customer_email = Tools::getValue('customer_email');
+        $customer_phone = Tools::getValue('customer_phone');
+        $date_reserved = Tools::getValue('date_reserved');
+        $date_to = Tools::getValue('date_to');
+        $hour_from = (int)Tools::getValue('hour_from');
+        $hour_to = (int)Tools::getValue('hour_to');
+        $total_price = (float)Tools::getValue('total_price', 0);
+        $notes = Tools::getValue('notes');
+        $admin_notes = Tools::getValue('admin_notes');
+
+        if (!$id_booker || !$customer_firstname || !$customer_lastname || !$customer_email || !$date_reserved) {
+            die(json_encode(['success' => false, 'message' => 'Paramètres manquants']));
         }
-        .legend-color {
-            display: inline-block;
-            width: 12px;
-            height: 12px;
-            margin-right: 8px;
-            border-radius: 2px;
+
+        // Vérifier que le booker existe
+        $booker = new Booker($id_booker);
+        if (!Validate::isLoadedObject($booker)) {
+            die(json_encode(['success' => false, 'message' => 'Booker introuvable']));
         }
-        #reservations-calendar {
-            min-height: 600px;
+
+        // Générer une référence unique
+        $booking_reference = 'BK' . date('Ymd') . '-' . strtoupper(Tools::substr(uniqid(), -6));
+
+        // Créer la réservation
+        $reservation = new BookerAuthReserved();
+        $reservation->id_booker = $id_booker;
+        $reservation->booking_reference = $booking_reference;
+        $reservation->customer_firstname = $customer_firstname;
+        $reservation->customer_lastname = $customer_lastname;
+        $reservation->customer_email = $customer_email;
+        $reservation->customer_phone = $customer_phone;
+        $reservation->date_reserved = $date_reserved;
+        $reservation->date_to = $date_to ?: $date_reserved;
+        $reservation->hour_from = $hour_from;
+        $reservation->hour_to = $hour_to;
+        $reservation->total_price = $total_price;
+        $reservation->deposit_paid = 0.00;
+        $reservation->status = 0; // En attente
+        $reservation->payment_status = 'pending';
+        $reservation->notes = $notes;
+        $reservation->admin_notes = $admin_notes;
+        $reservation->date_add = date('Y-m-d H:i:s');
+        $reservation->date_upd = date('Y-m-d H:i:s');
+
+        // Définir la date d'expiration
+        $expiry_hours = Configuration::get('BOOKING_EXPIRY_HOURS', 24);
+        $reservation->date_expiry = date('Y-m-d H:i:s', strtotime('+' . $expiry_hours . ' hours'));
+
+        if ($reservation->add()) {
+            die(json_encode([
+                'success' => true, 
+                'message' => 'Réservation créée avec succès',
+                'id' => $reservation->id,
+                'booking_reference' => $booking_reference
+            ]));
+        } else {
+            die(json_encode(['success' => false, 'message' => 'Erreur lors de la création']));
         }
-        </style>';
     }
-    
+
     /**
-     * Traitement des requêtes AJAX
+     * AJAX : Mettre à jour une réservation
      */
-    public function ajaxProcess()
+    public function ajaxProcessUpdateReservation()
+    {
+        $id_reserved = (int)Tools::getValue('id_reserved');
+        $reservation = new BookerAuthReserved($id_reserved);
+        
+        if (!Validate::isLoadedObject($reservation)) {
+            die(json_encode(['success' => false, 'message' => 'Réservation introuvable']));
+        }
+
+        $reservation->customer_firstname = Tools::getValue('customer_firstname');
+        $reservation->customer_lastname = Tools::getValue('customer_lastname');
+        $reservation->customer_email = Tools::getValue('customer_email');
+        $reservation->customer_phone = Tools::getValue('customer_phone');
+        $reservation->date_reserved = Tools::getValue('date_reserved');
+        $reservation->date_to = Tools::getValue('date_to') ?: Tools::getValue('date_reserved');
+        $reservation->hour_from = (int)Tools::getValue('hour_from');
+        $reservation->hour_to = (int)Tools::getValue('hour_to');
+        $reservation->total_price = (float)Tools::getValue('total_price');
+        $reservation->status = (int)Tools::getValue('status');
+        $reservation->notes = Tools::getValue('notes');
+        $reservation->admin_notes = Tools::getValue('admin_notes');
+        $reservation->date_upd = date('Y-m-d H:i:s');
+
+        if ($reservation->update()) {
+            die(json_encode(['success' => true, 'message' => 'Réservation mise à jour avec succès']));
+        } else {
+            die(json_encode(['success' => false, 'message' => 'Erreur lors de la mise à jour']));
+        }
+    }
+
+    /**
+     * AJAX : Supprimer une réservation
+     */
+    public function ajaxProcessDeleteReservation()
+    {
+        $id_reserved = (int)Tools::getValue('id_reserved');
+        $reservation = new BookerAuthReserved($id_reserved);
+        
+        if (!Validate::isLoadedObject($reservation)) {
+            die(json_encode(['success' => false, 'message' => 'Réservation introuvable']));
+        }
+
+        if ($reservation->delete()) {
+            die(json_encode(['success' => true, 'message' => 'Réservation supprimée avec succès']));
+        } else {
+            die(json_encode(['success' => false, 'message' => 'Erreur lors de la suppression']));
+        }
+    }
+
+    /**
+     * AJAX : Actions en lot sur les réservations
+     */
+    public function ajaxProcessBulkAction()
     {
         $action = Tools::getValue('action');
+        $ids = Tools::getValue('ids');
         
+        if (!is_array($ids) || empty($ids)) {
+            die(json_encode(['success' => false, 'message' => 'Aucune sélection']));
+        }
+
+        $success_count = 0;
+        $error_count = 0;
+
         switch ($action) {
-            case 'getReservations':
-                $this->ajaxProcessGetReservations();
-                break;
-            case 'updateStatus':
-                $this->ajaxProcessUpdateStatus();
-                break;
-            case 'validateReservation':
-                $this->ajaxProcessValidateReservation();
-                break;
-            case 'cancelReservation':
-                $this->ajaxProcessCancelReservation();
-                break;
-            case 'createOrder':
-                $this->ajaxProcessCreateOrder();
-                break;
-            case 'bulkValidate':
-                $this->ajaxProcessBulkValidate();
-                break;
-            case 'bulkCancel':
-                $this->ajaxProcessBulkCancel();
-                break;
-            case 'sendNotification':
-                $this->ajaxProcessSendNotification();
-                break;
-            default:
-                $this->ajaxDie('Action non reconnue');
-        }
-    }
-    
-    /**
-     * Récupérer les réservations pour le calendrier
-     */
-    private function ajaxProcessGetReservations()
-    {
-        try {
-            $id_booker = (int)Tools::getValue('id_booker');
-            $status = Tools::getValue('status');
-            $start = Tools::getValue('start');
-            $end = Tools::getValue('end');
-            
-            $sql = 'SELECT r.*, b.name as booker_name, b.location, c.firstname, c.lastname
-                    FROM `' . _DB_PREFIX_ . 'booker_auth_reserved` r
-                    LEFT JOIN `' . _DB_PREFIX_ . 'booker` b ON r.id_booker = b.id_booker
-                    LEFT JOIN `' . _DB_PREFIX_ . 'customer` c ON r.id_customer = c.id_customer
-                    WHERE r.date_start >= "' . pSQL($start) . '"
-                    AND r.date_end <= "' . pSQL($end) . '"';
-                    
-            if ($id_booker > 0) {
-                $sql .= ' AND r.id_booker = ' . $id_booker;
-            }
-            
-            if ($status !== '' && $status !== null) {
-                $sql .= ' AND r.status = ' . (int)$status;
-            }
-            
-            $sql .= ' ORDER BY r.date_start ASC';
-            
-            $reservations = Db::getInstance()->executeS($sql);
-            $events = [];
-            
-            $statusColors = [
-                0 => ['bg' => '#ffc107', 'border' => '#ffc107'], // En attente - Jaune
-                1 => ['bg' => '#17a2b8', 'border' => '#17a2b8'], // Validée - Bleu
-                2 => ['bg' => '#28a745', 'border' => '#28a745'], // Payée - Vert
-                3 => ['bg' => '#dc3545', 'border' => '#dc3545'], // Annulée - Rouge
-                4 => ['bg' => '#6c757d', 'border' => '#6c757d'], // Expirée - Gris
-                5 => ['bg' => '#fd7e14', 'border' => '#fd7e14']  // Remboursée - Orange
-            ];
-            
-            foreach ($reservations as $reservation) {
-                $customer_name = $reservation['customer_firstname'] && $reservation['customer_lastname'] 
-                    ? $reservation['customer_firstname'] . ' ' . $reservation['customer_lastname']
-                    : $reservation['customer_firstname'] . ' ' . $reservation['customer_lastname'];
-                    
-                $color = $statusColors[$reservation['status']] ?? $statusColors[0];
-                
-                $events[] = [
-                    'id' => 'res_' . $reservation['id_reserved'],
-                    'title' => $reservation['booker_name'] . ' - ' . $customer_name,
-                    'start' => $reservation['date_start'],
-                    'end' => $reservation['date_end'],
-                    'backgroundColor' => $color['bg'],
-                    'borderColor' => $color['border'],
-                    'textColor' => '#ffffff',
-                    'extendedProps' => [
-                        'type' => 'reservation',
-                        'id_reserved' => (int)$reservation['id_reserved'],
-                        'id_booker' => (int)$reservation['id_booker'],
-                        'booking_reference' => $reservation['booking_reference'],
-                        'booker_name' => $reservation['booker_name'],
-                        'location' => $reservation['location'],
-                        'customer_name' => $customer_name,
-                        'customer_email' => $reservation['customer_email'],
-                        'customer_phone' => $reservation['customer_phone'],
-                        'status' => (int)$reservation['status'],
-                        'status_label' => BookerAuthReserved::getStatusLabel($reservation['status']),
-                        'total_price' => $reservation['total_price'] ? (float)$reservation['total_price'] : null,
-                        'deposit_paid' => $reservation['deposit_paid'] ? (float)$reservation['deposit_paid'] : 0,
-                        'notes' => $reservation['notes'],
-                        'admin_notes' => $reservation['admin_notes'],
-                        'date_reserved' => $reservation['date_reserved'],
-                        'date_expiry' => $reservation['date_expiry'],
-                        'date_confirmed' => $reservation['date_confirmed']
-                    ]
-                ];
-            }
-            
-            $this->ajaxDie(json_encode($events));
-            
-        } catch (Exception $e) {
-            PrestaShopLogger::addLog('AdminBookerCalendarReservations::ajaxProcessGetReservations() - Erreur: ' . $e->getMessage(), 3);
-            $this->ajaxDie(json_encode(['error' => $this->l('Erreur lors du chargement des réservations')]));
-        }
-    }
-    
-    /**
-     * Valider une réservation
-     */
-    private function ajaxProcessValidateReservation()
-    {
-        try {
-            $id_reserved = (int)Tools::getValue('id_reserved');
-            $admin_notes = Tools::getValue('admin_notes', '');
-            
-            if (!$id_reserved) {
-                $this->ajaxDie(json_encode(['error' => $this->l('ID de réservation manquant')]));
-            }
-            
-            $reservation = new BookerAuthReserved($id_reserved);
-            if (!Validate::isLoadedObject($reservation)) {
-                $this->ajaxDie(json_encode(['error' => $this->l('Réservation introuvable')]));
-            }
-            
-            // Mise à jour du statut
-            $reservation->status = 1; // Validée
-            $reservation->admin_notes = $admin_notes;
-            $reservation->date_confirmed = date('Y-m-d H:i:s');
-            $reservation->date_upd = date('Y-m-d H:i:s');
-            
-            if ($reservation->save()) {
-                // Créer automatiquement une commande si configuré
-                if (Configuration::get('BOOKING_AUTO_CREATE_ORDER')) {
-                    $this->createOrderForReservation($reservation);
+            case 'accept':
+                foreach ($ids as $id) {
+                    $reservation = new BookerAuthReserved(str_replace('res_', '', $id));
+                    if (Validate::isLoadedObject($reservation) && $reservation->status == 0) {
+                        $reservation->status = 1; // Acceptée
+                        if ($reservation->update()) {
+                            $success_count++;
+                        } else {
+                            $error_count++;
+                        }
+                    }
                 }
-                
-                // Envoyer notification au client
-                $this->sendValidationNotification($reservation);
-                
-                $this->ajaxDie(json_encode(['success' => $this->l('Réservation validée avec succès')]));
-            } else {
-                $this->ajaxDie(json_encode(['error' => $this->l('Erreur lors de la validation')]));
-            }
+                break;
+
+            case 'cancel':
+                foreach ($ids as $id) {
+                    $reservation = new BookerAuthReserved(str_replace('res_', '', $id));
+                    if (Validate::isLoadedObject($reservation)) {
+                        $reservation->status = 4; // Annulée
+                        if ($reservation->update()) {
+                            $success_count++;
+                        } else {
+                            $error_count++;
+                        }
+                    }
+                }
+                break;
+
+            case 'create_orders':
+                foreach ($ids as $id) {
+                    $reservation = new BookerAuthReserved(str_replace('res_', '', $id));
+                    if (Validate::isLoadedObject($reservation) && $reservation->status == 1) {
+                        if ($this->createOrderForReservation($reservation)) {
+                            $success_count++;
+                        } else {
+                            $error_count++;
+                        }
+                    }
+                }
+                break;
+
+            case 'delete':
+                foreach ($ids as $id) {
+                    $reservation = new BookerAuthReserved(str_replace('res_', '', $id));
+                    if (Validate::isLoadedObject($reservation)) {
+                        if ($reservation->delete()) {
+                            $success_count++;
+                        } else {
+                            $error_count++;
+                        }
+                    }
+                }
+                break;
+        }
+
+        die(json_encode([
+            'success' => true,
+            'message' => "$success_count opération(s) réussie(s), $error_count erreur(s)"
+        ]));
+    }
+
+    /**
+     * AJAX : Obtenir les détails d'une réservation
+     */
+    public function ajaxProcessGetReservationDetails()
+    {
+        $id_reserved = (int)Tools::getValue('id_reserved');
+        
+        $sql = 'SELECT 
+            r.*,
+            b.name as booker_name,
+            b.location as booker_location,
+            b.price as booker_price,
+            c.firstname as customer_registered_firstname,
+            c.lastname as customer_registered_lastname
+        FROM `' . _DB_PREFIX_ . 'booker_auth_reserved` r
+        LEFT JOIN `' . _DB_PREFIX_ . 'booker` b ON (r.id_booker = b.id_booker)
+        LEFT JOIN `' . _DB_PREFIX_ . 'customer` c ON (r.id_customer = c.id_customer)
+        WHERE r.id_reserved = ' . (int)$id_reserved;
+        
+        $reservation = Db::getInstance()->getRow($sql);
+        
+        if ($reservation) {
+            $statuses = $this->getReservationStatuses();
+            $reservation['status_label'] = $statuses[$reservation['status']]['label'] ?? 'Inconnu';
             
-        } catch (Exception $e) {
-            PrestaShopLogger::addLog('AdminBookerCalendarReservations::ajaxProcessValidateReservation() - Erreur: ' . $e->getMessage(), 3);
-            $this->ajaxDie(json_encode(['error' => $this->l('Erreur lors de la validation')]));
+            die(json_encode(['success' => true, 'data' => $reservation]));
+        } else {
+            die(json_encode(['success' => false, 'message' => 'Réservation introuvable']));
         }
     }
-    
+
     /**
-     * Annuler une réservation
+     * Créer une commande PrestaShop pour une réservation
      */
-    private function ajaxProcessCancelReservation()
+    private function createOrderForReservation($reservation)
     {
         try {
-            $id_reserved = (int)Tools::getValue('id_reserved');
-            $admin_notes = Tools::getValue('admin_notes', '');
+            // Récupérer ou créer le client
+            $customer = $this->getOrCreateCustomer($reservation);
+            if (!$customer) return false;
             
-            if (!$id_reserved) {
-                $this->ajaxDie(json_encode(['error' => $this->l('ID de réservation manquant')]));
+            // Récupérer le booker et son produit lié
+            $booker = new Booker($reservation->id_booker);
+            if (!$booker->id_product) return false;
+            
+            // Créer la commande
+            $order_id = $this->createOrder($customer, $booker, $reservation);
+            
+            if ($order_id) {
+                // Mettre à jour la réservation
+                $reservation->status = 2; // En attente de paiement
+                $reservation->id_order = $order_id;
+                return $reservation->update();
             }
             
-            $reservation = new BookerAuthReserved($id_reserved);
-            if (!Validate::isLoadedObject($reservation)) {
-                $this->ajaxDie(json_encode(['error' => $this->l('Réservation introuvable')]));
-            }
-            
-            // Mise à jour du statut
-            $reservation->status = 3; // Annulée
-            $reservation->admin_notes = $admin_notes;
-            $reservation->date_upd = date('Y-m-d H:i:s');
-            
-            if ($reservation->save()) {
-                // Libérer le créneau
-                $this->releaseTimeSlot($reservation);
-                
-                // Envoyer notification au client
-                $this->sendCancellationNotification($reservation);
-                
-                $this->ajaxDie(json_encode(['success' => $this->l('Réservation annulée avec succès')]));
-            } else {
-                $this->ajaxDie(json_encode(['error' => $this->l('Erreur lors de l\'annulation')]));
-            }
+            return false;
             
         } catch (Exception $e) {
-            PrestaShopLogger::addLog('AdminBookerCalendarReservations::ajaxProcessCancelReservation() - Erreur: ' . $e->getMessage(), 3);
-            $this->ajaxDie(json_encode(['error' => $this->l('Erreur lors de l\'annulation')]));
+            PrestaShopLogger::addLog('Erreur création commande réservation #' . $reservation->id . ': ' . $e->getMessage(), 3);
+            return false;
         }
     }
-    
-    // Méthodes utilitaires à implémenter
-    private function createOrderForReservation($reservation) {
-        // À implémenter : création automatique de commande
+
+    /**
+     * Créer ou récupérer un client
+     */
+    private function getOrCreateCustomer($reservation)
+    {
+        // Chercher un client existant par email
+        $id_customer = Customer::customerExists($reservation->customer_email, true);
+        
+        if ($id_customer) {
+            return new Customer($id_customer);
+        }
+        
+        // Créer un nouveau client
+        $customer = new Customer();
+        $customer->firstname = $reservation->customer_firstname;
+        $customer->lastname = $reservation->customer_lastname;
+        $customer->email = $reservation->customer_email;
+        $customer->passwd = Tools::encrypt(Tools::passwdGen());
+        $customer->active = 1;
+        
+        if ($customer->add()) {
+            return $customer;
+        }
+        
+        return false;
     }
-    
-    private function sendValidationNotification($reservation) {
-        // À implémenter : envoi de notification
+
+    /**
+     * Créer une commande PrestaShop
+     */
+    private function createOrder($customer, $booker, $reservation)
+    {
+        $context = Context::getContext();
+        
+        // Créer le panier
+        $cart = new Cart();
+        $cart->id_customer = $customer->id;
+        $cart->id_address_delivery = Address::getFirstCustomerAddressId($customer->id) ?: 1;
+        $cart->id_address_invoice = Address::getFirstCustomerAddressId($customer->id) ?: 1;
+        $cart->id_currency = Configuration::get('PS_CURRENCY_DEFAULT');
+        $cart->id_lang = Configuration::get('PS_LANG_DEFAULT');
+        $cart->add();
+        
+        // Ajouter le produit au panier
+        $cart->updateQty(1, $booker->id_product);
+        
+        // Créer la commande
+        $order = new Order();
+        $order->id_customer = $customer->id;
+        $order->id_cart = $cart->id;
+        $order->id_currency = $cart->id_currency;
+        $order->id_lang = $cart->id_lang;
+        $order->id_address_delivery = $cart->id_address_delivery;
+        $order->id_address_invoice = $cart->id_address_invoice;
+        $order->current_state = Configuration::get('BOOKING_STATUS_PENDING_PAYMENT', Configuration::get('PS_OS_BANKWIRE'));
+        $order->payment = 'Réservation en attente';
+        $order->module = 'booking';
+        $order->total_paid = $reservation->total_price;
+        $order->total_paid_tax_incl = $reservation->total_price;
+        $order->total_paid_tax_excl = $reservation->total_price;
+        $order->total_products = $reservation->total_price;
+        $order->total_products_wt = $reservation->total_price;
+        $order->conversion_rate = 1;
+        
+        if ($order->add()) {
+            return $order->id;
+        }
+        
+        return false;
     }
-    
-    private function sendCancellationNotification($reservation) {
-        // À implémenter : envoi de notification
+
+    /**
+     * Obtenir la couleur de bordure d'une réservation
+     */
+    private function getReservationBorderColor($reservation)
+    {
+        // Bordure différente selon le statut de paiement
+        switch ($reservation['payment_status']) {
+            case 'authorized':
+            case 'captured':
+                return '#007bff'; // Bleu pour paiement OK
+            case 'cancelled':
+            case 'refunded':
+                return '#dc3545'; // Rouge pour paiement annulé
+            default:
+                return '#6c757d'; // Gris par défaut
+        }
     }
-    
-    private function releaseTimeSlot($reservation) {
-        // À implémenter : libération du créneau
+
+    /**
+     * Créer le template par défaut
+     */
+    private function createDefaultTemplate()
+    {
+        $template_dir = $this->module->getLocalPath() . 'views/templates/admin/';
+        if (!is_dir($template_dir)) {
+            mkdir($template_dir, 0755, true);
+        }
+        
+        $template_content = $this->getDefaultTemplateContent();
+        file_put_contents($template_dir . 'calendar_reservations.tpl', $template_content);
+    }
+
+    /**
+     * Contenu du template par défaut
+     */
+    private function getDefaultTemplateContent()
+    {
+        return '<div class="booking-calendar-container">
+    <div class="panel">
+        <div class="panel-heading">
+            <h3><i class="icon-calendar"></i> Calendrier des Réservations</h3>
+        </div>
+        <div class="panel-body">
+            <div class="calendar-controls mb-3">
+                <div class="row">
+                    <div class="col-md-3">
+                        <select id="booker-filter" class="form-control">
+                            <option value="">Tous les éléments</option>
+                            {foreach from=$bookers item=booker}
+                                <option value="{$booker.id_booker}">{$booker.name}</option>
+                            {/foreach}
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <select id="status-filter" class="form-control">
+                            <option value="">Tous les statuts</option>
+                            {foreach from=$statuses key=status_id item=status_info}
+                                <option value="{$status_id}">{$status_info.label}</option>
+                            {/foreach}
+                        </select>
+                    </div>
+                    <div class="col-md-6 text-right">
+                        <button class="btn btn-primary" id="add-reservation">
+                            <i class="icon-plus"></i> Ajouter réservation
+                        </button>
+                        <button class="btn btn-success" id="bulk-accept" disabled>
+                            <i class="icon-check"></i> Accepter
+                        </button>
+                        <button class="btn btn-info" id="bulk-create-orders" disabled>
+                            <i class="icon-shopping-cart"></i> Créer commandes
+                        </button>
+                        <button class="btn btn-danger" id="bulk-cancel" disabled>
+                            <i class="icon-remove"></i> Annuler
+                        </button>
+                    </div>
+                </div>
+                
+                <div class="row mt-2">
+                    <div class="col-md-12">
+                        <div class="legend">
+                            <small>
+                                <strong>Légende :</strong>
+                                {foreach from=$statuses key=status_id item=status_info}
+                                    <span class="legend-item" style="background-color: {$status_info.color};">{$status_info.label}</span>
+                                {/foreach}
+                            </small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div id="calendar"></div>
+        </div>
+    </div>
+</div>
+
+<script>
+var bookingCalendarConfig = {$calendar_config|json_encode};
+var bookingStatuses = {$statuses|json_encode};
+var ajaxUrl = "{$ajax_url}";
+var currentToken = "{$token}";
+</script>';
     }
 }
+?>
