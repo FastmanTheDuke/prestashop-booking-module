@@ -1,1124 +1,863 @@
 /**
- * Gestionnaire du calendrier des réservations
- * Gestion complète des réservations, validation, statuts et actions en lot
+ * JavaScript pour le calendrier de gestion des réservations
+ * Interface interactive pour visualiser et gérer les réservations clients
  */
 
-document.addEventListener('DOMContentLoaded', function() {
-    
-    let calendar;
-    let currentModal = null;
-    let selectedReservations = [];
-    let multiSelectMode = false;
-    
-    // Initialisation du calendrier
-    initializeCalendar();
-    
-    // Gestionnaires d'événements
-    setupEventHandlers();
+var ReservationCalendar = {
+    calendar: null,
+    selectedEvents: [],
+    currentBookerFilter: '',
+    currentStatusFilter: '',
     
     /**
-     * Initialisation du calendrier FullCalendar
+     * Initialisation du calendrier des réservations
      */
-    function initializeCalendar() {
-        const calendarEl = document.getElementById('calendar');
-        
-        if (!calendarEl) {
-            console.error('Élément calendrier non trouvé');
-            return;
-        }
-        
-        // Vérifier que FullCalendar est chargé
-        if (typeof FullCalendar === 'undefined') {
-            console.error('FullCalendar non chargé');
-            return;
-        }
-        
-        // Vérifier que ReservationCalendar est défini
-        if (typeof ReservationCalendar === 'undefined') {
-            console.error('ReservationCalendar non défini');
-            return;
-        }
-        
-        calendar = new FullCalendar.Calendar(calendarEl, {
-            locale: ReservationCalendar.config.locale || 'fr',
-            initialView: ReservationCalendar.config.default_view || 'timeGridWeek',
-            initialDate: ReservationCalendar.currentDate,
-            
+    init: function() {
+        var calendarEl = document.getElementById('calendar');
+        if (!calendarEl) return;
+
+        this.calendar = new FullCalendar.Calendar(calendarEl, {
+            initialView: 'timeGridWeek',
             headerToolbar: {
-                left: '',
+                left: 'prev,next today',
                 center: 'title',
-                right: ''
+                right: 'dayGridMonth,timeGridWeek,timeGridDay,listWeek'
             },
-            
+            locale: 'fr',
+            firstDay: bookingCalendarConfig.firstDay || 1,
+            slotMinTime: bookingCalendarConfig.minTime || '08:00',
+            slotMaxTime: bookingCalendarConfig.maxTime || '20:00',
+            slotDuration: bookingCalendarConfig.slotDuration || '00:30:00',
             height: 'auto',
-            
-            businessHours: ReservationCalendar.config.business_hours,
-            
             selectable: true,
-            selectMirror: false,
+            selectMirror: true,
+            editable: true,
+            eventResizableFromStart: true,
+            businessHours: bookingCalendarConfig.businessHours,
             
-            eventClick: function(info) {
-                handleEventClick(info);
-            },
-            
-            select: function(info) {
-                handleDateSelection(info);
-            },
-            
-            eventDrop: function(info) {
-                handleEventDrop(info);
-            },
-            
-            eventResize: function(info) {
-                handleEventResize(info);
-            },
-            
-            events: function(info, successCallback, failureCallback) {
-                loadReservations(info.startStr, info.endStr, successCallback, failureCallback);
-            },
-            
-            eventDidMount: function(info) {
-                setupEventTooltip(info);
-                setupEventInteraction(info);
-            },
-            
-            loading: function(isLoading) {
-                document.getElementById('calendar-loading').style.display = isLoading ? 'block' : 'none';
-                document.getElementById('calendar').style.display = isLoading ? 'none' : 'block';
-            }
-        });
-        
-        calendar.render();
-    }
-    
-    /**
-     * Configuration des gestionnaires d'événements
-     */
-    function setupEventHandlers() {
-        // Navigation du calendrier
-        document.getElementById('prev-btn')?.addEventListener('click', function() {
-            calendar.prev();
-        });
-        
-        document.getElementById('next-btn')?.addEventListener('click', function() {
-            calendar.next();
-        });
-        
-        document.getElementById('today-btn')?.addEventListener('click', function() {
-            calendar.today();
-        });
-        
-        // Sélecteur de vue
-        document.querySelectorAll('#view-selector .btn').forEach(btn => {
-            btn.addEventListener('click', function() {
-                const view = this.dataset.view;
-                calendar.changeView(view);
-                
-                // Mettre à jour l'apparence des boutons
-                document.querySelectorAll('#view-selector .btn').forEach(b => b.classList.remove('active'));
-                this.classList.add('active');
-            });
-        });
-        
-        // Filtres
-        document.getElementById('booker-filter')?.addEventListener('change', function() {
-            calendar.refetchEvents();
-        });
-        
-        document.getElementById('status-filter')?.addEventListener('change', function() {
-            calendar.refetchEvents();
-        });
-        
-        // Actions rapides
-        document.getElementById('quick-validate-btn')?.addEventListener('click', quickValidateSelected);
-        document.getElementById('quick-cancel-btn')?.addEventListener('click', quickCancelSelected);
-        document.getElementById('quick-create-orders-btn')?.addEventListener('click', quickCreateOrders);
-        document.getElementById('quick-send-reminders-btn')?.addEventListener('click', quickSendReminders);
-        
-        // Actions en lot
-        document.getElementById('bulk-validate-btn')?.addEventListener('click', showBulkValidateModal);
-        document.getElementById('bulk-cancel-btn')?.addEventListener('click', showBulkCancelModal);
-        document.getElementById('bulk-send-notifications-btn')?.addEventListener('click', showBulkNotificationsModal);
-        document.getElementById('export-reservations-btn')?.addEventListener('click', exportReservations);
-        
-        // Boutons de modal de réservation
-        document.getElementById('validate-reservation-btn')?.addEventListener('click', validateCurrentReservation);
-        document.getElementById('edit-reservation-btn')?.addEventListener('click', editCurrentReservation);
-        document.getElementById('create-order-btn')?.addEventListener('click', createOrderForCurrent);
-        document.getElementById('send-notification-btn')?.addEventListener('click', showSendNotificationModal);
-        document.getElementById('cancel-reservation-btn')?.addEventListener('click', cancelCurrentReservation);
-        
-        // Boutons de formulaire
-        document.getElementById('save-reservation-btn')?.addEventListener('click', saveReservationChanges);
-        document.getElementById('cancel-edit-btn')?.addEventListener('click', cancelEdit);
-        
-        // Boutons d'exécution des actions en lot
-        document.getElementById('execute-bulk-validate-btn')?.addEventListener('click', executeBulkValidate);
-        document.getElementById('execute-bulk-cancel-btn')?.addEventListener('click', executeBulkCancel);
-        document.getElementById('execute-send-notification-btn')?.addEventListener('click', executeSendNotification);
-        
-        // Gestion des modales
-        setupModalHandlers();
-        
-        // Gestion du type de notification personnalisée
-        document.getElementById('notification-type')?.addEventListener('change', function() {
-            const customGroup = document.getElementById('custom-message-group');
-            if (this.value === 'custom') {
-                customGroup.style.display = 'block';
-            } else {
-                customGroup.style.display = 'none';
-            }
-        });
-        
-        // Mode multi-sélection avec Ctrl
-        document.addEventListener('keydown', function(e) {
-            if (e.key === 'Control') {
-                multiSelectMode = true;
-            }
-        });
-        
-        document.addEventListener('keyup', function(e) {
-            if (e.key === 'Control') {
-                multiSelectMode = false;
-            }
-        });
-    }
-    
-    /**
-     * Charger les réservations
-     */
-    function loadReservations(start, end, successCallback, failureCallback) {
-        const bookerId = document.getElementById('booker-filter')?.value || '';
-        const statusFilter = document.getElementById('status-filter')?.value || '';
-        
-        const params = {
-            start: start,
-            end: end,
-            booker_id: bookerId,
-            status: statusFilter
-        };
-        
-        fetch(ReservationCalendar.ajaxUrls.get_reservations + '&' + new URLSearchParams(params))
-            .then(response => response.json())
-            .then(data => {
-                if (data.error) {
-                    console.error('Erreur chargement réservations:', data.error);
-                    failureCallback(data.error);
-                    return;
+            // Sources d'événements
+            events: {
+                url: ajaxUrl,
+                method: 'POST',
+                extraParams: function() {
+                    return {
+                        ajax: 1,
+                        action: 'getReservations',
+                        token: currentToken,
+                        id_booker: ReservationCalendar.currentBookerFilter,
+                        status_filter: ReservationCalendar.currentStatusFilter
+                    };
+                },
+                failure: function() {
+                    ReservationCalendar.showMessage('Erreur lors du chargement des réservations', 'error');
                 }
-                successCallback(data);
-            })
-            .catch(error => {
-                console.error('Erreur AJAX:', error);
-                failureCallback(error);
-            });
-    }
-    
+            },
+
+            // Callbacks
+            select: this.handleSelect.bind(this),
+            eventClick: this.handleEventClick.bind(this),
+            eventDrop: this.handleEventDrop.bind(this),
+            eventResize: this.handleEventResize.bind(this),
+            eventDidMount: this.handleEventDidMount.bind(this)
+        });
+
+        this.calendar.render();
+        this.initEventHandlers();
+        this.loadStatistics();
+    },
+
     /**
-     * Gestion du clic sur un événement
+     * Initialisation des gestionnaires d'événements
      */
-    function handleEventClick(info) {
-        const eventProps = info.event.extendedProps;
-        
-        if (eventProps.type === 'reservation') {
-            if (multiSelectMode) {
-                toggleReservationSelection(info.event, eventProps.reservation_id);
-            } else {
-                // Désélectionner tout et sélectionner uniquement cette réservation
-                clearSelection();
-                showReservationDetails(eventProps.reservation_id);
+    initEventHandlers: function() {
+        // Filtrage par booker
+        $('#booker-filter').on('change', function() {
+            ReservationCalendar.currentBookerFilter = $(this).val();
+            ReservationCalendar.refreshCalendar();
+        });
+
+        // Filtrage par statut
+        $('#status-filter').on('change', function() {
+            ReservationCalendar.currentStatusFilter = $(this).val();
+            ReservationCalendar.refreshCalendar();
+        });
+
+        // Bouton ajouter réservation
+        $('#add-reservation').on('click', function() {
+            ReservationCalendar.showCreateModal();
+        });
+
+        // Actions en lot - Accepter
+        $('#bulk-accept').on('click', function() {
+            if (ReservationCalendar.selectedEvents.length > 0) {
+                ReservationCalendar.executeBulkAction('accept');
             }
-        }
-    }
-    
+        });
+
+        // Actions en lot - Créer commandes
+        $('#bulk-create-orders').on('click', function() {
+            if (ReservationCalendar.selectedEvents.length > 0) {
+                ReservationCalendar.executeBulkAction('create_orders');
+            }
+        });
+
+        // Actions en lot - Annuler
+        $('#bulk-cancel').on('click', function() {
+            if (ReservationCalendar.selectedEvents.length > 0) {
+                ReservationCalendar.executeBulkAction('cancel');
+            }
+        });
+
+        // Sélection multiple avec Ctrl+Click
+        $(document).on('keydown keyup', function(e) {
+            if (e.ctrlKey || e.metaKey) {
+                $('body').addClass('multi-select-mode');
+            } else {
+                $('body').removeClass('multi-select-mode');
+            }
+        });
+    },
+
     /**
-     * Basculer la sélection d'une réservation
+     * Gestionnaire de sélection de période
      */
-    function toggleReservationSelection(event, reservationId) {
-        const index = selectedReservations.indexOf(reservationId);
+    handleSelect: function(selectInfo) {
+        this.showCreateModal({
+            start: selectInfo.start,
+            end: selectInfo.end
+        });
+        this.calendar.unselect();
+    },
+
+    /**
+     * Gestionnaire de clic sur événement
+     */
+    handleEventClick: function(clickInfo) {
+        if ($('body').hasClass('multi-select-mode')) {
+            // Mode sélection multiple
+            this.toggleEventSelection(clickInfo.event);
+        } else {
+            // Mode consultation/édition
+            this.showReservationDetails(clickInfo.event);
+        }
+    },
+
+    /**
+     * Gestionnaire de déplacement de réservation
+     */
+    handleEventDrop: function(dropInfo) {
+        var event = dropInfo.event;
+        var data = {
+            ajax: 1,
+            action: 'updateReservation',
+            token: currentToken,
+            id_reserved: event.extendedProps.id_reserved,
+            date_reserved: this.formatDate(event.start),
+            date_to: this.formatDate(event.end || event.start),
+            hour_from: event.start.getHours(),
+            hour_to: (event.end || event.start).getHours()
+        };
+
+        this.sendAjaxRequest(data, function(response) {
+            if (!response.success) {
+                ReservationCalendar.showMessage(response.message, 'error');
+                dropInfo.revert();
+            } else {
+                ReservationCalendar.showMessage('Réservation déplacée avec succès', 'success');
+            }
+        });
+    },
+
+    /**
+     * Gestionnaire de redimensionnement de réservation
+     */
+    handleEventResize: function(resizeInfo) {
+        this.handleEventDrop(resizeInfo);
+    },
+
+    /**
+     * Rendu personnalisé des événements
+     */
+    handleEventDidMount: function(info) {
+        var event = info.event;
+        var props = event.extendedProps;
+        
+        // Ajouter des classes CSS selon le statut
+        info.el.classList.add('status-' + props.status);
+        
+        // Ajouter tooltip avec détails
+        $(info.el).tooltip({
+            title: this.getReservationTooltip(event),
+            html: true,
+            placement: 'top'
+        });
+
+        // Ajouter indicateur de prix si présent
+        if (props.total_price > 0) {
+            var priceIndicator = document.createElement('div');
+            priceIndicator.className = 'price-indicator';
+            priceIndicator.innerHTML = props.total_price + '€';
+            info.el.appendChild(priceIndicator);
+        }
+
+        // Ajouter indicateur de paiement
+        if (props.deposit_paid > 0) {
+            var depositIndicator = document.createElement('div');
+            depositIndicator.className = 'deposit-indicator';
+            depositIndicator.innerHTML = '💳';
+            info.el.appendChild(depositIndicator);
+        }
+    },
+
+    /**
+     * Toggle sélection d'événement
+     */
+    toggleEventSelection: function(event) {
+        var eventId = event.id;
+        var index = this.selectedEvents.indexOf(eventId);
         
         if (index > -1) {
             // Désélectionner
-            selectedReservations.splice(index, 1);
-            event.el.classList.remove('selected');
+            this.selectedEvents.splice(index, 1);
+            event.setProp('backgroundColor', event.backgroundColor);
         } else {
             // Sélectionner
-            selectedReservations.push(reservationId);
-            event.el.classList.add('selected');
+            this.selectedEvents.push(eventId);
+            event.setProp('backgroundColor', '#007bff');
         }
         
-        updateSelectionUI();
-    }
-    
-    /**
-     * Vider la sélection
-     */
-    function clearSelection() {
-        selectedReservations = [];
-        document.querySelectorAll('.fc-event.selected').forEach(el => {
-            el.classList.remove('selected');
-        });
-        updateSelectionUI();
-    }
-    
-    /**
-     * Mettre à jour l'interface de sélection
-     */
-    function updateSelectionUI() {
-        const count = selectedReservations.length;
-        const quickActions = document.querySelector('.quick-actions');
+        // Mettre à jour les boutons d'actions groupées
+        var count = this.selectedEvents.length;
+        var disabled = count === 0;
+        
+        $('#bulk-accept, #bulk-create-orders, #bulk-cancel').prop('disabled', disabled);
         
         if (count > 0) {
-            quickActions.style.display = 'block';
-            // Mettre à jour le texte des boutons avec le nombre
-            document.querySelectorAll('.quick-actions .btn').forEach(btn => {
-                const text = btn.textContent.replace(/\(\d+\)/, '').trim();
-                btn.textContent = text + ' (' + count + ')';
-            });
+            $('#bulk-accept').text('Accepter (' + count + ')');
+            $('#bulk-create-orders').text('Créer commandes (' + count + ')');
+            $('#bulk-cancel').text('Annuler (' + count + ')');
         } else {
-            quickActions.style.display = 'none';
+            $('#bulk-accept').text('Accepter');
+            $('#bulk-create-orders').text('Créer commandes');
+            $('#bulk-cancel').text('Annuler');
         }
-    }
-    
+    },
+
     /**
-     * Gestion de la sélection de dates
+     * Afficher modal de création de réservation
      */
-    function handleDateSelection(info) {
-        // Optionnel : créer une nouvelle réservation
-        calendar.unselect();
-    }
-    
-    /**
-     * Gestion du déplacement d'événement
-     */
-    function handleEventDrop(info) {
-        const eventProps = info.event.extendedProps;
+    showCreateModal: function(selectInfo) {
+        var modal = this.createModal('Créer une réservation', this.getCreateForm(selectInfo));
         
-        if (eventProps.type === 'reservation') {
-            updateReservationDateTime(eventProps.reservation_id, info.event.start, info.event.end);
-        }
-    }
-    
-    /**
-     * Gestion du redimensionnement d'événement
-     */
-    function handleEventResize(info) {
-        const eventProps = info.event.extendedProps;
+        modal.find('.btn-primary').on('click', function() {
+            ReservationCalendar.submitCreateForm(modal);
+        });
         
-        if (eventProps.type === 'reservation') {
-            updateReservationDateTime(eventProps.reservation_id, info.event.start, info.event.end);
-        }
-    }
-    
+        modal.modal('show');
+    },
+
     /**
-     * Configuration des tooltips pour les événements
+     * Afficher détails d'une réservation
      */
-    function setupEventTooltip(info) {
-        const eventProps = info.event.extendedProps;
+    showReservationDetails: function(event) {
+        var data = {
+            ajax: 1,
+            action: 'getReservationDetails',
+            token: currentToken,
+            id_reserved: event.extendedProps.id_reserved
+        };
+
+        this.sendAjaxRequest(data, function(response) {
+            if (response.success) {
+                var modal = ReservationCalendar.createModal(
+                    'Détails de la réservation #' + response.data.booking_reference, 
+                    ReservationCalendar.getDetailsView(response.data)
+                );
+                
+                modal.find('.btn-primary').text('Modifier').on('click', function() {
+                    modal.modal('hide');
+                    ReservationCalendar.showEditModal(event, response.data);
+                });
+                
+                modal.find('.btn-danger').show().text('Supprimer').on('click', function() {
+                    ReservationCalendar.deleteReservation(event.extendedProps.id_reserved);
+                    modal.modal('hide');
+                });
+                
+                modal.modal('show');
+            } else {
+                ReservationCalendar.showMessage(response.message, 'error');
+            }
+        });
+    },
+
+    /**
+     * Afficher modal d'édition de réservation
+     */
+    showEditModal: function(event, data) {
+        var modal = this.createModal('Modifier la réservation', this.getEditForm(data || event.extendedProps));
         
-        if (eventProps.type === 'reservation') {
-            const tooltip = `
-                <strong>${eventProps.booking_reference}</strong><br>
-                Client: ${eventProps.customer_name}<br>
-                Email: ${eventProps.customer_email}<br>
-                Prix: ${eventProps.total_price}€<br>
-                Statut: ${getStatusLabel(eventProps.status)}<br>
-                ${eventProps.notes ? 'Notes: ' + eventProps.notes : ''}
-            `;
-            
-            info.el.setAttribute('data-tooltip', tooltip);
-            info.el.setAttribute('title', tooltip.replace(/<[^>]*>/g, ''));
-        }
-    }
-    
-    /**
-     * Configuration des interactions sur les événements
-     */
-    function setupEventInteraction(info) {
-        const eventProps = info.event.extendedProps;
+        modal.find('.btn-primary').on('click', function() {
+            ReservationCalendar.submitEditForm(modal, event);
+        });
         
-        if (eventProps.type === 'reservation') {
-            // Double-clic pour éditer
-            info.el.addEventListener('dblclick', function() {
-                showReservationDetails(eventProps.reservation_id);
-            });
-            
-            // Clic droit pour menu contextuel
-            info.el.addEventListener('contextmenu', function(e) {
-                e.preventDefault();
-                showContextMenu(e, eventProps.reservation_id, eventProps.status);
-            });
-        }
-    }
-    
+        modal.modal('show');
+    },
+
     /**
-     * Afficher les détails d'une réservation
+     * Générer le formulaire de création
      */
-    function showReservationDetails(reservationId) {
-        fetch(ReservationCalendar.ajaxUrls.get_reservation_details + '&id=' + reservationId)
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    showReservationModal(data.data);
-                } else {
-                    showNotification('error', data.message || ReservationCalendar.messages.error_loading);
-                }
-            })
-            .catch(error => {
-                console.error('Erreur:', error);
-                showNotification('error', ReservationCalendar.messages.error_loading);
-            });
-    }
-    
-    /**
-     * Afficher la modal de réservation
-     */
-    function showReservationModal(reservation) {
-        // Stocker l'ID de la réservation courante
-        document.getElementById('reservation-id').value = reservation.id;
+    getCreateForm: function(selectInfo) {
+        var startDate = selectInfo ? this.formatDate(selectInfo.start) : '';
+        var startHour = selectInfo ? selectInfo.start.getHours() : 9;
+        var endHour = selectInfo ? (selectInfo.end || selectInfo.start).getHours() : 17;
         
-        // Construire le contenu des détails
-        const detailsHtml = `
-            <div class="row">
-                <div class="col-md-6">
-                    <h5>Informations générales</h5>
-                    <p><strong>Référence:</strong> ${reservation.booking_reference}</p>
-                    <p><strong>Élément:</strong> ${reservation.booker_name}</p>
-                    <p><strong>Période:</strong> ${formatDateTime(reservation.date_start)} - ${formatDateTime(reservation.date_end)}</p>
-                    <p><strong>Prix total:</strong> ${reservation.total_price}€</p>
-                    <p><strong>Statut:</strong> <span class="badge reservation-${reservation.status}">${getStatusLabel(reservation.status)}</span></p>
-                    <p><strong>Paiement:</strong> <span class="badge">${getPaymentStatusLabel(reservation.payment_status)}</span></p>
+        return `
+            <form id="reservation-form">
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="form-group">
+                            <label>Élément à réserver *</label>
+                            <select class="form-control" name="id_booker" required>
+                                <option value="">Sélectionner...</option>
+                                ${this.getBookerOptions()}
+                            </select>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="form-group">
+                            <label>Statut</label>
+                            <select class="form-control" name="status">
+                                ${this.getStatusOptions()}
+                            </select>
+                        </div>
+                    </div>
                 </div>
-                <div class="col-md-6">
-                    <h5>Informations client</h5>
-                    <p><strong>Nom:</strong> ${reservation.customer_firstname} ${reservation.customer_lastname}</p>
-                    <p><strong>Email:</strong> <a href="mailto:${reservation.customer_email}">${reservation.customer_email}</a></p>
-                    <p><strong>Téléphone:</strong> ${reservation.customer_phone || 'Non renseigné'}</p>
-                    ${reservation.order_reference ? '<p><strong>Commande:</strong> ' + reservation.order_reference + '</p>' : ''}
+                
+                <h5>Informations client</h5>
+                <div class="row">
+                    <div class="col-md-4">
+                        <div class="form-group">
+                            <label>Prénom *</label>
+                            <input type="text" class="form-control" name="customer_firstname" required>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="form-group">
+                            <label>Nom *</label>
+                            <input type="text" class="form-control" name="customer_lastname" required>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="form-group">
+                            <label>Email *</label>
+                            <input type="email" class="form-control" name="customer_email" required>
+                        </div>
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="form-group">
+                            <label>Téléphone</label>
+                            <input type="tel" class="form-control" name="customer_phone">
+                        </div>
+                    </div>
+                </div>
+                
+                <h5>Détails de la réservation</h5>
+                <div class="row">
+                    <div class="col-md-4">
+                        <div class="form-group">
+                            <label>Date de début *</label>
+                            <input type="date" class="form-control" name="date_reserved" value="${startDate}" required>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="form-group">
+                            <label>Date de fin</label>
+                            <input type="date" class="form-control" name="date_to" value="${startDate}">
+                        </div>
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col-md-3">
+                        <div class="form-group">
+                            <label>Heure début *</label>
+                            <select class="form-control" name="hour_from" required>
+                                ${this.getHourOptions(startHour)}
+                            </select>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="form-group">
+                            <label>Heure fin *</label>
+                            <select class="form-control" name="hour_to" required>
+                                ${this.getHourOptions(endHour)}
+                            </select>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="form-group">
+                            <label>Prix total</label>
+                            <input type="number" class="form-control" name="total_price" step="0.01" min="0">
+                        </div>
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="form-group">
+                            <label>Notes client</label>
+                            <textarea class="form-control" name="notes" rows="3"></textarea>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="form-group">
+                            <label>Notes admin</label>
+                            <textarea class="form-control" name="admin_notes" rows="3"></textarea>
+                        </div>
+                    </div>
+                </div>
+            </form>
+        `;
+    },
+
+    /**
+     * Générer le formulaire d'édition
+     */
+    getEditForm: function(data) {
+        return `
+            <form id="reservation-edit-form">
+                <input type="hidden" name="id_reserved" value="${data.id_reserved}">
+                
+                <div class="alert alert-info">
+                    <strong>Référence :</strong> ${data.booking_reference}
+                </div>
+                
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="form-group">
+                            <label>Élément réservé</label>
+                            <input type="text" class="form-control" value="${data.booker_name}" readonly>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="form-group">
+                            <label>Statut</label>
+                            <select class="form-control" name="status">
+                                ${this.getStatusOptions(data.status)}
+                            </select>
+                        </div>
+                    </div>
+                </div>
+                
+                <h5>Informations client</h5>
+                <div class="row">
+                    <div class="col-md-4">
+                        <div class="form-group">
+                            <label>Prénom *</label>
+                            <input type="text" class="form-control" name="customer_firstname" value="${data.customer_firstname}" required>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="form-group">
+                            <label>Nom *</label>
+                            <input type="text" class="form-control" name="customer_lastname" value="${data.customer_lastname}" required>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="form-group">
+                            <label>Email *</label>
+                            <input type="email" class="form-control" name="customer_email" value="${data.customer_email}" required>
+                        </div>
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="form-group">
+                            <label>Téléphone</label>
+                            <input type="tel" class="form-control" name="customer_phone" value="${data.customer_phone || ''}">
+                        </div>
+                    </div>
+                </div>
+                
+                <h5>Détails de la réservation</h5>
+                <div class="row">
+                    <div class="col-md-4">
+                        <div class="form-group">
+                            <label>Date de début *</label>
+                            <input type="date" class="form-control" name="date_reserved" value="${data.date_reserved}" required>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="form-group">
+                            <label>Date de fin</label>
+                            <input type="date" class="form-control" name="date_to" value="${data.date_to || data.date_reserved}">
+                        </div>
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col-md-3">
+                        <div class="form-group">
+                            <label>Heure début *</label>
+                            <select class="form-control" name="hour_from" required>
+                                ${this.getHourOptions(data.hour_from)}
+                            </select>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="form-group">
+                            <label>Heure fin *</label>
+                            <select class="form-control" name="hour_to" required>
+                                ${this.getHourOptions(data.hour_to)}
+                            </select>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="form-group">
+                            <label>Prix total</label>
+                            <input type="number" class="form-control" name="total_price" value="${data.total_price}" step="0.01" min="0">
+                        </div>
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="form-group">
+                            <label>Notes client</label>
+                            <textarea class="form-control" name="notes" rows="3">${data.notes || ''}</textarea>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="form-group">
+                            <label>Notes admin</label>
+                            <textarea class="form-control" name="admin_notes" rows="3">${data.admin_notes || ''}</textarea>
+                        </div>
+                    </div>
+                </div>
+            </form>
+        `;
+    },
+
+    /**
+     * Générer la vue détaillée d'une réservation
+     */
+    getDetailsView: function(data) {
+        var statusLabels = bookingStatuses || {};
+        var statusInfo = statusLabels[data.status] || { label: 'Inconnu', color: '#6c757d' };
+        
+        return `
+            <div class="reservation-details">
+                <div class="row">
+                    <div class="col-md-6">
+                        <h5>Informations générales</h5>
+                        <table class="table table-borderless">
+                            <tr><td><strong>Référence :</strong></td><td>${data.booking_reference}</td></tr>
+                            <tr><td><strong>Élément :</strong></td><td>${data.booker_name}</td></tr>
+                            <tr><td><strong>Lieu :</strong></td><td>${data.booker_location || 'Non spécifié'}</td></tr>
+                            <tr><td><strong>Statut :</strong></td><td><span class="label" style="background-color: ${statusInfo.color}">${statusInfo.label}</span></td></tr>
+                            <tr><td><strong>Paiement :</strong></td><td>${this.getPaymentStatusLabel(data.payment_status)}</td></tr>
+                        </table>
+                    </div>
+                    <div class="col-md-6">
+                        <h5>Informations client</h5>
+                        <table class="table table-borderless">
+                            <tr><td><strong>Nom :</strong></td><td>${data.customer_firstname} ${data.customer_lastname}</td></tr>
+                            <tr><td><strong>Email :</strong></td><td><a href="mailto:${data.customer_email}">${data.customer_email}</a></td></tr>
+                            <tr><td><strong>Téléphone :</strong></td><td>${data.customer_phone || 'Non renseigné'}</td></tr>
+                        </table>
+                    </div>
+                </div>
+                
+                <div class="row">
+                    <div class="col-md-6">
+                        <h5>Détails de la réservation</h5>
+                        <table class="table table-borderless">
+                            <tr><td><strong>Date début :</strong></td><td>${this.formatDateFr(data.date_reserved)}</td></tr>
+                            <tr><td><strong>Date fin :</strong></td><td>${this.formatDateFr(data.date_to || data.date_reserved)}</td></tr>
+                            <tr><td><strong>Horaires :</strong></td><td>${data.hour_from}h - ${data.hour_to}h</td></tr>
+                            <tr><td><strong>Prix total :</strong></td><td>${data.total_price}€</td></tr>
+                            <tr><td><strong>Caution versée :</strong></td><td>${data.deposit_paid}€</td></tr>
+                        </table>
+                    </div>
+                    <div class="col-md-6">
+                        <h5>Notes</h5>
+                        <div class="form-group">
+                            <label>Notes client :</label>
+                            <div class="well well-sm">${data.notes || 'Aucune note'}</div>
+                        </div>
+                        <div class="form-group">
+                            <label>Notes admin :</label>
+                            <div class="well well-sm">${data.admin_notes || 'Aucune note'}</div>
+                        </div>
+                    </div>
                 </div>
             </div>
-            ${reservation.notes ? '<div class="alert alert-info"><strong>Notes client:</strong> ' + reservation.notes + '</div>' : ''}
-            ${reservation.admin_notes ? '<div class="alert alert-warning"><strong>Notes admin:</strong> ' + reservation.admin_notes + '</div>' : ''}
         `;
-        
-        document.getElementById('reservation-details').innerHTML = detailsHtml;
-        
-        // Pré-remplir le formulaire
-        document.getElementById('reservation-status').value = reservation.status;
-        document.getElementById('reservation-payment-status').value = reservation.payment_status;
-        document.getElementById('reservation-admin-notes').value = reservation.admin_notes || '';
-        
-        // Ajuster les actions disponibles selon le statut
-        updateActionButtons(reservation.status, reservation.payment_status);
-        
-        // Afficher la modal
-        showModal('reservation-modal');
-    }
-    
+    },
+
     /**
-     * Mettre à jour les boutons d'action selon le statut
+     * Soumettre le formulaire de création
      */
-    function updateActionButtons(status, paymentStatus) {
-        const validateBtn = document.getElementById('validate-reservation-btn');
-        const cancelBtn = document.getElementById('cancel-reservation-btn');
-        const createOrderBtn = document.getElementById('create-order-btn');
-        
-        // Validation disponible uniquement pour les réservations en attente
-        if (validateBtn) {
-            validateBtn.style.display = status === 'pending' ? 'inline-block' : 'none';
-        }
-        
-        // Annulation disponible pour les statuts non finaux
-        if (cancelBtn) {
-            cancelBtn.style.display = ['pending', 'confirmed'].includes(status) ? 'inline-block' : 'none';
-        }
-        
-        // Création de commande pour les réservations confirmées sans commande
-        if (createOrderBtn) {
-            createOrderBtn.style.display = status === 'confirmed' && paymentStatus === 'pending' ? 'inline-block' : 'none';
-        }
-    }
-    
-    /**
-     * Valider la réservation courante
-     */
-    function validateCurrentReservation() {
-        const reservationId = document.getElementById('reservation-id').value;
-        
-        if (!reservationId) {
-            showNotification('error', 'Aucune réservation sélectionnée');
-            return;
-        }
-        
-        if (!confirm(ReservationCalendar.messages.confirm_validate)) {
-            return;
-        }
-        
-        const params = new URLSearchParams({
-            id: reservationId,
-            create_order: document.getElementById('bulk-validate-auto-create-order')?.checked || true,
-            send_notification: document.getElementById('bulk-validate-send-notification')?.checked || true
-        });
-        
-        fetch(ReservationCalendar.ajaxUrls.validate_reservation, {
-            method: 'POST',
-            body: params
-        })
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                showNotification('success', data.message || ReservationCalendar.messages.success_validate);
-                hideModal('reservation-modal');
-                calendar.refetchEvents();
+    submitCreateForm: function(modal) {
+        var formData = this.serializeForm(modal.find('#reservation-form'));
+        formData.ajax = 1;
+        formData.action = 'createReservation';
+        formData.token = currentToken;
+
+        this.sendAjaxRequest(formData, function(response) {
+            if (response.success) {
+                ReservationCalendar.showMessage('Réservation créée avec succès', 'success');
+                ReservationCalendar.refreshCalendar();
+                ReservationCalendar.loadStatistics();
+                modal.modal('hide');
             } else {
-                showNotification('error', data.message || 'Erreur lors de la validation');
+                ReservationCalendar.showMessage(response.message, 'error');
             }
-        })
-        .catch(error => {
-            console.error('Erreur:', error);
-            showNotification('error', 'Erreur lors de la validation');
         });
-    }
-    
+    },
+
     /**
-     * Annuler la réservation courante
+     * Soumettre le formulaire d'édition
      */
-    function cancelCurrentReservation() {
-        const reservationId = document.getElementById('reservation-id').value;
-        
-        if (!reservationId) {
-            showNotification('error', 'Aucune réservation sélectionnée');
-            return;
-        }
-        
-        if (!confirm(ReservationCalendar.messages.confirm_cancel)) {
-            return;
-        }
-        
-        const reason = prompt('Motif d\'annulation:') || 'Annulation administrative';
-        const notes = prompt('Notes additionnelles (optionnel):') || '';
-        
-        const params = new URLSearchParams({
-            id: reservationId,
-            reason: reason,
-            notes: notes,
-            send_notification: true,
-            process_refund: false
-        });
-        
-        fetch(ReservationCalendar.ajaxUrls.cancel_reservation, {
-            method: 'POST',
-            body: params
-        })
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                showNotification('success', data.message || ReservationCalendar.messages.success_cancel);
-                hideModal('reservation-modal');
-                calendar.refetchEvents();
+    submitEditForm: function(modal, event) {
+        var formData = this.serializeForm(modal.find('#reservation-edit-form'));
+        formData.ajax = 1;
+        formData.action = 'updateReservation';
+        formData.token = currentToken;
+
+        this.sendAjaxRequest(formData, function(response) {
+            if (response.success) {
+                ReservationCalendar.showMessage('Réservation mise à jour avec succès', 'success');
+                ReservationCalendar.refreshCalendar();
+                ReservationCalendar.loadStatistics();
+                modal.modal('hide');
             } else {
-                showNotification('error', data.message || 'Erreur lors de l\'annulation');
+                ReservationCalendar.showMessage(response.message, 'error');
             }
-        })
-        .catch(error => {
-            console.error('Erreur:', error);
-            showNotification('error', 'Erreur lors de l\'annulation');
         });
-    }
-    
+    },
+
     /**
-     * Créer une commande pour la réservation courante
+     * Supprimer une réservation
      */
-    function createOrderForCurrent() {
-        const reservationId = document.getElementById('reservation-id').value;
-        
-        if (!reservationId) {
-            showNotification('error', 'Aucune réservation sélectionnée');
+    deleteReservation: function(id_reserved) {
+        if (!confirm('Êtes-vous sûr de vouloir supprimer cette réservation ?')) {
             return;
         }
-        
-        const params = new URLSearchParams({ id: reservationId });
-        
-        fetch(ReservationCalendar.ajaxUrls.create_order, {
-            method: 'POST',
-            body: params
-        })
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                showNotification('success', data.message || ReservationCalendar.messages.success_order_created);
-                hideModal('reservation-modal');
-                calendar.refetchEvents();
-            } else {
-                showNotification('error', data.message || 'Erreur lors de la création de commande');
-            }
-        })
-        .catch(error => {
-            console.error('Erreur:', error);
-            showNotification('error', 'Erreur lors de la création de commande');
-        });
-    }
-    
-    /**
-     * Éditer la réservation courante
-     */
-    function editCurrentReservation() {
-        document.getElementById('reservation-details').style.display = 'none';
-        document.getElementById('reservation-form').style.display = 'block';
-        document.getElementById('reservation-actions').style.display = 'none';
-        document.getElementById('reservation-form-actions').style.display = 'block';
-    }
-    
-    /**
-     * Annuler l'édition
-     */
-    function cancelEdit() {
-        document.getElementById('reservation-details').style.display = 'block';
-        document.getElementById('reservation-form').style.display = 'none';
-        document.getElementById('reservation-actions').style.display = 'block';
-        document.getElementById('reservation-form-actions').style.display = 'none';
-    }
-    
-    /**
-     * Sauvegarder les modifications de réservation
-     */
-    function saveReservationChanges() {
-        const reservationId = document.getElementById('reservation-id').value;
-        const status = document.getElementById('reservation-status').value;
-        const paymentStatus = document.getElementById('reservation-payment-status').value;
-        const adminNotes = document.getElementById('reservation-admin-notes').value;
-        
-        const params = new URLSearchParams({
-            id: reservationId,
-            status: status,
-            payment_status: paymentStatus,
-            admin_notes: adminNotes
-        });
-        
-        fetch(ReservationCalendar.ajaxUrls.update_status, {
-            method: 'POST',
-            body: params
-        })
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                showNotification('success', data.message || 'Réservation mise à jour');
-                hideModal('reservation-modal');
-                calendar.refetchEvents();
-            } else {
-                showNotification('error', data.message || 'Erreur lors de la mise à jour');
-            }
-        })
-        .catch(error => {
-            console.error('Erreur:', error);
-            showNotification('error', 'Erreur lors de la mise à jour');
-        });
-    }
-    
-    /**
-     * Actions rapides pour les réservations sélectionnées
-     */
-    function quickValidateSelected() {
-        if (selectedReservations.length === 0) {
-            showNotification('error', ReservationCalendar.messages.no_selection);
-            return;
-        }
-        
-        showBulkValidateModal();
-    }
-    
-    function quickCancelSelected() {
-        if (selectedReservations.length === 0) {
-            showNotification('error', ReservationCalendar.messages.no_selection);
-            return;
-        }
-        
-        showBulkCancelModal();
-    }
-    
-    function quickCreateOrders() {
-        if (selectedReservations.length === 0) {
-            showNotification('error', ReservationCalendar.messages.no_selection);
-            return;
-        }
-        
-        // Créer les commandes pour toutes les réservations sélectionnées
-        Promise.all(selectedReservations.map(id => {
-            const params = new URLSearchParams({ id: id });
-            return fetch(ReservationCalendar.ajaxUrls.create_order, {
-                method: 'POST',
-                body: params
-            }).then(response => response.json());
-        }))
-        .then(results => {
-            const successful = results.filter(r => r.success).length;
-            showNotification('success', `${successful} commande(s) créée(s) avec succès`);
-            calendar.refetchEvents();
-            clearSelection();
-        })
-        .catch(error => {
-            console.error('Erreur:', error);
-            showNotification('error', 'Erreur lors de la création des commandes');
-        });
-    }
-    
-    function quickSendReminders() {
-        if (selectedReservations.length === 0) {
-            showNotification('error', ReservationCalendar.messages.no_selection);
-            return;
-        }
-        
-        const params = new URLSearchParams({
-            notification_type: 'reminder'
-        });
-        selectedReservations.forEach(id => params.append('ids[]', id));
-        
-        fetch(ReservationCalendar.ajaxUrls.bulk_send_notifications, {
-            method: 'POST',
-            body: params
-        })
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                showNotification('success', data.message || 'Rappels envoyés avec succès');
-                clearSelection();
-            } else {
-                showNotification('error', data.message || 'Erreur lors de l\'envoi des rappels');
-            }
-        })
-        .catch(error => {
-            console.error('Erreur:', error);
-            showNotification('error', 'Erreur lors de l\'envoi des rappels');
-        });
-    }
-    
-    /**
-     * Modales d'actions en lot
-     */
-    function showBulkValidateModal() {
-        const count = selectedReservations.length;
-        if (count === 0) {
-            showNotification('error', ReservationCalendar.messages.no_selection);
-            return;
-        }
-        
-        document.getElementById('bulk-validation-count').textContent = 
-            ReservationCalendar.messages.bulk_validate_count.replace('%d', count);
-        
-        showModal('bulk-validate-modal');
-    }
-    
-    function showBulkCancelModal() {
-        const count = selectedReservations.length;
-        if (count === 0) {
-            showNotification('error', ReservationCalendar.messages.no_selection);
-            return;
-        }
-        
-        document.getElementById('bulk-cancel-count').textContent = 
-            ReservationCalendar.messages.bulk_cancel_count.replace('%d', count);
-        
-        showModal('bulk-cancel-modal');
-    }
-    
-    function showBulkNotificationsModal() {
-        if (selectedReservations.length === 0) {
-            showNotification('error', ReservationCalendar.messages.no_selection);
-            return;
-        }
-        
-        showModal('send-notification-modal');
-    }
-    
-    function showSendNotificationModal() {
-        const reservationId = document.getElementById('reservation-id').value;
-        if (!reservationId) {
-            showNotification('error', 'Aucune réservation sélectionnée');
-            return;
-        }
-        
-        document.getElementById('notification-reservation-id').value = reservationId;
-        showModal('send-notification-modal');
-    }
-    
-    /**
-     * Exécution des actions en lot
-     */
-    function executeBulkValidate() {
-        const autoCreateOrder = document.getElementById('bulk-validate-auto-create-order').checked;
-        const sendNotification = document.getElementById('bulk-validate-send-notification').checked;
-        
-        const params = new URLSearchParams({
-            auto_create_order: autoCreateOrder,
-            send_notification: sendNotification
-        });
-        
-        selectedReservations.forEach(id => params.append('ids[]', id));
-        
-        fetch(ReservationCalendar.ajaxUrls.bulk_validate, {
-            method: 'POST',
-            body: params
-        })
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                showNotification('success', data.message || ReservationCalendar.messages.success_bulk_validate);
-                hideModal('bulk-validate-modal');
-                calendar.refetchEvents();
-                clearSelection();
-            } else {
-                showNotification('error', data.message || 'Erreur lors de la validation en lot');
-            }
-        })
-        .catch(error => {
-            console.error('Erreur:', error);
-            showNotification('error', 'Erreur lors de la validation en lot');
-        });
-    }
-    
-    function executeBulkCancel() {
-        const cancelReason = document.getElementById('bulk-cancel-reason').value;
-        const cancelNotes = document.getElementById('bulk-cancel-notes').value;
-        const sendNotification = document.getElementById('bulk-cancel-send-notification').checked;
-        const processRefund = document.getElementById('bulk-cancel-process-refund').checked;
-        
-        if (!cancelReason) {
-            showNotification('error', ReservationCalendar.messages.validation_required);
-            return;
-        }
-        
-        const params = new URLSearchParams({
-            cancel_reason: cancelReason,
-            cancel_notes: cancelNotes,
-            send_notification: sendNotification,
-            process_refund: processRefund
-        });
-        
-        selectedReservations.forEach(id => params.append('ids[]', id));
-        
-        fetch(ReservationCalendar.ajaxUrls.bulk_cancel, {
-            method: 'POST',
-            body: params
-        })
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                showNotification('success', data.message || ReservationCalendar.messages.success_bulk_cancel);
-                hideModal('bulk-cancel-modal');
-                calendar.refetchEvents();
-                clearSelection();
-            } else {
-                showNotification('error', data.message || 'Erreur lors de l\'annulation en lot');
-            }
-        })
-        .catch(error => {
-            console.error('Erreur:', error);
-            showNotification('error', 'Erreur lors de l\'annulation en lot');
-        });
-    }
-    
-    function executeSendNotification() {
-        const notificationType = document.getElementById('notification-type').value;
-        const customMessage = document.getElementById('notification-custom-message').value;
-        const sendSms = document.getElementById('notification-send-sms').checked;
-        
-        if (!notificationType) {
-            showNotification('error', ReservationCalendar.messages.validation_required);
-            return;
-        }
-        
-        if (notificationType === 'custom' && !customMessage) {
-            showNotification('error', 'Message personnalisé requis');
-            return;
-        }
-        
-        // Notification individuelle ou en lot
-        const reservationId = document.getElementById('notification-reservation-id').value;
-        
-        if (reservationId) {
-            // Notification individuelle
-            const params = new URLSearchParams({
-                reservation_id: reservationId,
-                notification_type: notificationType,
-                custom_message: customMessage,
-                send_sms: sendSms
-            });
-            
-            fetch(ReservationCalendar.ajaxUrls.send_notification, {
-                method: 'POST',
-                body: params
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    showNotification('success', data.message || ReservationCalendar.messages.success_notification_sent);
-                    hideModal('send-notification-modal');
-                } else {
-                    showNotification('error', data.message || 'Erreur lors de l\'envoi');
-                }
-            })
-            .catch(error => {
-                console.error('Erreur:', error);
-                showNotification('error', 'Erreur lors de l\'envoi');
-            });
-        } else {
-            // Notification en lot
-            const params = new URLSearchParams({
-                notification_type: notificationType,
-                custom_message: customMessage
-            });
-            
-            selectedReservations.forEach(id => params.append('ids[]', id));
-            
-            fetch(ReservationCalendar.ajaxUrls.bulk_send_notifications, {
-                method: 'POST',
-                body: params
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    showNotification('success', data.message || 'Notifications envoyées avec succès');
-                    hideModal('send-notification-modal');
-                    clearSelection();
-                } else {
-                    showNotification('error', data.message || 'Erreur lors de l\'envoi en lot');
-                }
-            })
-            .catch(error => {
-                console.error('Erreur:', error);
-                showNotification('error', 'Erreur lors de l\'envoi en lot');
-            });
-        }
-    }
-    
-    /**
-     * Exporter les réservations
-     */
-    function exportReservations() {
-        const currentView = calendar.view;
-        const start = formatDate(currentView.activeStart);
-        const end = formatDate(currentView.activeEnd);
-        
-        const params = new URLSearchParams({
-            start: start,
-            end: end,
-            format: 'csv'
-        });
-        
-        const url = ReservationCalendar.ajaxUrls.export_reservations + '&' + params.toString();
-        window.location.href = url;
-    }
-    
-    /**
-     * Mettre à jour la date/heure d'une réservation (drag & drop)
-     */
-    function updateReservationDateTime(reservationId, startDate, endDate) {
-        const params = new URLSearchParams({
-            id: reservationId,
-            date_start: formatDateTime(startDate),
-            date_end: formatDateTime(endDate)
-        });
-        
-        fetch(ReservationCalendar.ajaxUrls.update_status, {
-            method: 'POST',
-            body: params
-        })
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                showNotification('success', 'Réservation déplacée avec succès');
-            } else {
-                showNotification('error', data.message || 'Erreur lors du déplacement');
-                calendar.refetchEvents(); // Revert changes
-            }
-        })
-        .catch(error => {
-            console.error('Erreur:', error);
-            calendar.refetchEvents(); // Revert changes
-        });
-    }
-    
-    /**
-     * Afficher un menu contextuel
-     */
-    function showContextMenu(event, reservationId, status) {
-        // Créer le menu contextuel
-        const menu = document.createElement('div');
-        menu.className = 'context-menu';
-        menu.style.position = 'fixed';
-        menu.style.left = event.pageX + 'px';
-        menu.style.top = event.pageY + 'px';
-        menu.style.zIndex = '9999';
-        menu.style.background = 'white';
-        menu.style.border = '1px solid #ccc';
-        menu.style.borderRadius = '4px';
-        menu.style.boxShadow = '0 2px 10px rgba(0,0,0,0.1)';
-        
-        const actions = [];
-        
-        // Actions selon le statut
-        if (status === 'pending') {
-            actions.push({ label: 'Valider', action: () => validateReservation(reservationId) });
-        }
-        
-        actions.push({ label: 'Voir détails', action: () => showReservationDetails(reservationId) });
-        actions.push({ label: 'Envoyer notification', action: () => sendNotificationToReservation(reservationId) });
-        
-        if (['pending', 'confirmed'].includes(status)) {
-            actions.push({ label: 'Annuler', action: () => cancelReservation(reservationId) });
-        }
-        
-        actions.forEach(item => {
-            const menuItem = document.createElement('div');
-            menuItem.textContent = item.label;
-            menuItem.style.padding = '8px 16px';
-            menuItem.style.cursor = 'pointer';
-            menuItem.addEventListener('click', () => {
-                item.action();
-                document.body.removeChild(menu);
-            });
-            menuItem.addEventListener('mouseenter', () => {
-                menuItem.style.backgroundColor = '#f5f5f5';
-            });
-            menuItem.addEventListener('mouseleave', () => {
-                menuItem.style.backgroundColor = 'white';
-            });
-            menu.appendChild(menuItem);
-        });
-        
-        document.body.appendChild(menu);
-        
-        // Supprimer le menu si on clique ailleurs
-        const removeMenu = (e) => {
-            if (!menu.contains(e.target)) {
-                document.body.removeChild(menu);
-                document.removeEventListener('click', removeMenu);
-            }
+
+        var data = {
+            ajax: 1,
+            action: 'deleteReservation',
+            token: currentToken,
+            id_reserved: id_reserved
         };
-        setTimeout(() => document.addEventListener('click', removeMenu), 100);
-    }
-    
-    /**
-     * Configuration des modales
-     */
-    function setupModalHandlers() {
-        // Fermeture des modales avec échap
-        document.addEventListener('keydown', function(e) {
-            if (e.key === 'Escape' && currentModal) {
-                hideModal(currentModal);
+
+        this.sendAjaxRequest(data, function(response) {
+            if (response.success) {
+                ReservationCalendar.showMessage('Réservation supprimée', 'success');
+                ReservationCalendar.refreshCalendar();
+                ReservationCalendar.loadStatistics();
+            } else {
+                ReservationCalendar.showMessage(response.message, 'error');
             }
         });
-        
-        // Fermeture des modales en cliquant sur le fond
-        document.querySelectorAll('.modal').forEach(modal => {
-            modal.addEventListener('click', function(e) {
-                if (e.target === this) {
-                    hideModal(this.id);
-                }
-            });
-        });
-    }
-    
+    },
+
     /**
-     * Fonctions utilitaires
+     * Exécuter une action groupée
      */
-    
-    function showModal(modalId) {
-        const modal = document.getElementById(modalId);
-        if (modal) {
-            modal.style.display = 'block';
-            modal.classList.add('show');
-            currentModal = modalId;
+    executeBulkAction: function(action) {
+        var actionLabels = {
+            'accept': 'accepter',
+            'cancel': 'annuler',
+            'create_orders': 'créer les commandes pour'
+        };
+        
+        var label = actionLabels[action] || action;
+        if (!confirm('Êtes-vous sûr de vouloir ' + label + ' ' + this.selectedEvents.length + ' réservation(s) ?')) {
+            return;
         }
-    }
-    
-    function hideModal(modalId) {
-        const modal = document.getElementById(modalId);
-        if (modal) {
-            modal.style.display = 'none';
-            modal.classList.remove('show');
-            currentModal = null;
+
+        var data = {
+            ajax: 1,
+            action: 'bulkAction',
+            token: currentToken,
+            action: action,
+            ids: this.selectedEvents
+        };
+
+        this.sendAjaxRequest(data, function(response) {
+            ReservationCalendar.showMessage(response.message, response.success ? 'success' : 'error');
+            ReservationCalendar.selectedEvents = [];
+            ReservationCalendar.refreshCalendar();
+            ReservationCalendar.loadStatistics();
+            $('#bulk-accept, #bulk-create-orders, #bulk-cancel').prop('disabled', true);
+            $('#bulk-accept').text('Accepter');
+            $('#bulk-create-orders').text('Créer commandes');
+            $('#bulk-cancel').text('Annuler');
+        });
+    },
+
+    /**
+     * Charger les statistiques
+     */
+    loadStatistics: function() {
+        // Cette fonction pourrait charger des statistiques en temps réel
+        // Pour l'instant, on se contente de mettre à jour l'affichage
+    },
+
+    /**
+     * Utilitaires
+     */
+    refreshCalendar: function() {
+        if (this.calendar) {
+            this.calendar.refetchEvents();
         }
-    }
-    
-    function showNotification(type, message) {
-        // Créer la notification
-        const notification = document.createElement('div');
-        notification.className = `alert alert-${type === 'success' ? 'success' : 'danger'}`;
-        notification.style.position = 'fixed';
-        notification.style.top = '20px';
-        notification.style.right = '20px';
-        notification.style.zIndex = '10000';
-        notification.style.minWidth = '300px';
-        notification.innerHTML = `
-            <button type="button" class="close" onclick="this.parentElement.remove()">
-                <span>&times;</span>
-            </button>
+    },
+
+    createModal: function(title, content) {
+        var modalId = 'reservation-modal-' + Date.now();
+        var modal = $(`
+            <div class="modal fade" id="${modalId}" tabindex="-1">
+                <div class="modal-dialog modal-lg">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h4 class="modal-title">${title}</h4>
+                            <button type="button" class="close" data-dismiss="modal">&times;</button>
+                        </div>
+                        <div class="modal-body">${content}</div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-default" data-dismiss="modal">Fermer</button>
+                            <button type="button" class="btn btn-danger" style="display: none;">Supprimer</button>
+                            <button type="button" class="btn btn-primary">Sauvegarder</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `);
+        
+        $('body').append(modal);
+        
+        modal.on('hidden.bs.modal', function() {
+            modal.remove();
+        });
+        
+        return modal;
+    },
+
+    serializeForm: function(form) {
+        var data = {};
+        form.find('input, select, textarea').each(function() {
+            var $this = $(this);
+            var name = $this.attr('name');
+            var value = $this.val();
+            
+            if ($this.attr('type') === 'checkbox') {
+                value = $this.is(':checked') ? 1 : 0;
+            }
+            
+            if (name) {
+                data[name] = value;
+            }
+        });
+        return data;
+    },
+
+    sendAjaxRequest: function(data, callback) {
+        $.post(ajaxUrl, data)
+            .done(function(response) {
+                try {
+                    var result = typeof response === 'string' ? JSON.parse(response) : response;
+                    callback(result);
+                } catch (e) {
+                    callback({ success: false, message: 'Erreur de communication' });
+                }
+            })
+            .fail(function() {
+                callback({ success: false, message: 'Erreur de communication' });
+            });
+    },
+
+    showMessage: function(message, type) {
+        var alertClass = type === 'success' ? 'alert-success' : 'alert-danger';
+        var alert = $(`<div class="alert ${alertClass} alert-dismissible">
+            <button type="button" class="close" data-dismiss="alert">&times;</button>
             ${message}
-        `;
+        </div>`);
         
-        document.body.appendChild(notification);
+        $('.booking-calendar-container').prepend(alert);
         
-        // Suppression automatique après 5 secondes
-        setTimeout(() => {
-            if (notification.parentElement) {
-                notification.remove();
-            }
+        setTimeout(function() {
+            alert.fadeOut();
         }, 5000);
-    }
-    
-    function formatDate(date) {
-        const d = new Date(date);
-        const month = (d.getMonth() + 1).toString().padStart(2, '0');
-        const day = d.getDate().toString().padStart(2, '0');
-        return d.getFullYear() + '-' + month + '-' + day;
-    }
-    
-    function formatDateTime(date) {
-        const d = new Date(date);
-        return d.getFullYear() + '-' + 
-               (d.getMonth() + 1).toString().padStart(2, '0') + '-' + 
-               d.getDate().toString().padStart(2, '0') + ' ' +
-               d.getHours().toString().padStart(2, '0') + ':' + 
-               d.getMinutes().toString().padStart(2, '0') + ':00';
-    }
-    
-    function getStatusLabel(status) {
-        const labels = {
-            'pending': 'En attente',
-            'confirmed': 'Confirmé',
-            'paid': 'Payé',
-            'cancelled': 'Annulé',
-            'completed': 'Terminé',
-            'refunded': 'Remboursé'
+    },
+
+    formatDate: function(date) {
+        return moment(date).format('YYYY-MM-DD');
+    },
+
+    formatDateFr: function(date) {
+        return moment(date).format('DD/MM/YYYY');
+    },
+
+    formatTime: function(date) {
+        return moment(date).format('HH:mm');
+    },
+
+    getReservationTooltip: function(event) {
+        var props = event.extendedProps;
+        return `
+            <strong>${props.customer_name}</strong><br>
+            <strong>Élément:</strong> ${props.booker_name}<br>
+            <strong>Prix:</strong> ${props.total_price}€<br>
+            <strong>Statut:</strong> ${props.status_label}<br>
+            <strong>Email:</strong> ${props.customer_email}<br>
+            ${props.customer_phone ? '<strong>Tél:</strong> ' + props.customer_phone + '<br>' : ''}
+            ${props.notes ? '<strong>Notes:</strong> ' + props.notes : ''}
+        `;
+    },
+
+    getBookerOptions: function() {
+        // Cette fonction devrait être alimentée par les données du serveur
+        return '';
+    },
+
+    getStatusOptions: function(selectedStatus) {
+        var statuses = bookingStatuses || {};
+        var options = '';
+        
+        for (var statusId in statuses) {
+            var selected = (selectedStatus == statusId) ? 'selected' : '';
+            options += `<option value="${statusId}" ${selected}>${statuses[statusId].label}</option>`;
+        }
+        
+        return options;
+    },
+
+    getHourOptions: function(selectedHour) {
+        var options = '';
+        for (var i = 0; i <= 23; i++) {
+            var selected = (selectedHour == i) ? 'selected' : '';
+            options += `<option value="${i}" ${selected}>${i}h00</option>`;
+        }
+        return options;
+    },
+
+    getPaymentStatusLabel: function(status) {
+        var labels = {
+            'pending': '<span class="label label-warning">En attente</span>',
+            'authorized': '<span class="label label-info">Autorisé</span>',
+            'captured': '<span class="label label-success">Capturé</span>',
+            'cancelled': '<span class="label label-danger">Annulé</span>',
+            'refunded': '<span class="label label-default">Remboursé</span>'
         };
-        return labels[status] || status;
+        
+        return labels[status] || '<span class="label label-default">Inconnu</span>';
     }
-    
-    function getPaymentStatusLabel(status) {
-        const labels = {
-            'pending': 'En attente',
-            'authorized': 'Autorisé',
-            'captured': 'Capturé',
-            'cancelled': 'Annulé',
-            'refunded': 'Remboursé'
-        };
-        return labels[status] || status;
-    }
-    
-    // Actions du menu contextuel
-    function validateReservation(reservationId) {
-        document.getElementById('reservation-id').value = reservationId;
-        validateCurrentReservation();
-    }
-    
-    function cancelReservation(reservationId) {
-        document.getElementById('reservation-id').value = reservationId;
-        cancelCurrentReservation();
-    }
-    
-    function sendNotificationToReservation(reservationId) {
-        document.getElementById('notification-reservation-id').value = reservationId;
-        showModal('send-notification-modal');
+};
+
+// Initialisation au chargement de la page
+$(document).ready(function() {
+    if (typeof bookingCalendarConfig !== 'undefined' && typeof ajaxUrl !== 'undefined') {
+        ReservationCalendar.init();
     }
 });
