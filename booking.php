@@ -17,14 +17,14 @@ class Booking extends Module  {
     {
         $this->name = 'booking';
         $this->tab = 'others';
-        $this->version = '2.1.1';
+        $this->version = '2.1.2';
         $this->author = 'BBb';
         $this->bootstrap = true;
         $this->need_instance = 0;
         
         parent::__construct();
 
-        $this->displayName = $this->l('Système de Réservations Avancé v2.1');
+        $this->displayName = $this->l('Système de Réservations Avancé v2.1.2');
         $this->description = $this->l('Module complet de gestion de réservations avec calendriers interactifs doubles, statuts avancés, intégration produits et paiement Stripe avec caution');
         $this->confirmUninstall = $this->l('Êtes-vous sûr de vouloir désinstaller ce module ? Toutes les données de réservation seront perdues.');
 
@@ -72,13 +72,13 @@ class Booking extends Module  {
     }
 
     /**
-     * Installation de la base de données - VERSION CORRIGÉE AVEC BON SCHÉMA
+     * Installation de la base de données - VERSION CORRIGÉE AVEC SCHÉMA COHÉRENT
      */
     private function installDB()
     {
         $sql = array();
 
-        // Table des éléments réservables (bookers) - SCHÉMA CORRIGÉ
+        // Table des éléments réservables (bookers) - SCHÉMA COMPLET ET COHÉRENT
         $sql[] = 'CREATE TABLE IF NOT EXISTS `' . _DB_PREFIX_ . 'booker` (
             `id_booker` int(11) NOT NULL AUTO_INCREMENT,
             `id_product` int(11) DEFAULT NULL,
@@ -93,16 +93,20 @@ class Booking extends Module  {
             `deposit_required` tinyint(1) DEFAULT 0,
             `deposit_amount` decimal(10,2) DEFAULT 0.00,
             `auto_confirm` tinyint(1) DEFAULT 0,
+            `cancellation_hours` int(11) DEFAULT 24,
+            `image` varchar(255) DEFAULT NULL,
+            `sort_order` int(11) DEFAULT 0,
             `google_account` varchar(255) DEFAULT NULL,
             `active` tinyint(1) DEFAULT 1,
             `date_add` datetime NOT NULL,
             `date_upd` datetime NOT NULL,
             PRIMARY KEY (`id_booker`),
             KEY `idx_product` (`id_product`),
-            KEY `idx_active` (`active`)
+            KEY `idx_active` (`active`),
+            KEY `idx_sort_order` (`sort_order`)
         ) ENGINE=' . _MYSQL_ENGINE_ . ' DEFAULT CHARSET=utf8';
 
-        // Table des disponibilités - SCHÉMA CORRIGÉ
+        // Table des disponibilités - SCHÉMA COMPLET ET COHÉRENT
         $sql[] = 'CREATE TABLE IF NOT EXISTS `' . _DB_PREFIX_ . 'booker_auth` (
             `id_auth` int(11) NOT NULL AUTO_INCREMENT,
             `id_booker` int(11) NOT NULL,
@@ -123,10 +127,12 @@ class Booking extends Module  {
             PRIMARY KEY (`id_auth`),
             KEY `idx_booker` (`id_booker`),
             KEY `idx_date_range` (`date_from`, `date_to`),
-            KEY `idx_active` (`active`)
+            KEY `idx_active` (`active`),
+            KEY `idx_recurring` (`recurring`),
+            KEY `idx_recurring_type` (`recurring_type`)
         ) ENGINE=' . _MYSQL_ENGINE_ . ' DEFAULT CHARSET=utf8';
 
-        // Table des réservations - SCHÉMA CORRIGÉ
+        // Table des réservations - SCHÉMA COMPLET ET COHÉRENT
         $sql[] = 'CREATE TABLE IF NOT EXISTS `' . _DB_PREFIX_ . 'booker_auth_reserved` (
             `id_reserved` int(11) NOT NULL AUTO_INCREMENT,
             `id_auth` int(11) NOT NULL,
@@ -160,10 +166,11 @@ class Booking extends Module  {
             KEY `idx_customer` (`id_customer`),
             KEY `idx_order` (`id_order`),
             KEY `idx_status` (`status`),
+            KEY `idx_payment_status` (`payment_status`),
             KEY `idx_date_range` (`date_reserved`, `date_to`)
         ) ENGINE=' . _MYSQL_ENGINE_ . ' DEFAULT CHARSET=utf8';
 
-        // Table de liaison produits
+        // Table de liaison produits PrestaShop
         $sql[] = 'CREATE TABLE IF NOT EXISTS `' . _DB_PREFIX_ . 'booker_product` (
             `id_booker` int(11) NOT NULL,
             `id_product` int(11) NOT NULL,
@@ -195,14 +202,40 @@ class Booking extends Module  {
             `id_employee` int(10) unsigned NULL,
             `date_add` DATETIME NOT NULL,
             PRIMARY KEY (`id_log`),
-            INDEX `idx_id_reservation` (`id_reservation`),
-            INDEX `idx_id_booker` (`id_booker`),
+            INDEX `idx_reservation` (`id_reservation`),
+            INDEX `idx_booker` (`id_booker`),
             INDEX `idx_action` (`action`),
-            INDEX `idx_id_employee` (`id_employee`),
+            INDEX `idx_employee` (`id_employee`),
             INDEX `idx_date_add` (`date_add`)
         ) ENGINE=' . _MYSQL_ENGINE_ . ' DEFAULT CHARSET=utf8';
 
-        // Exécution des requêtes SQL
+        // Table des sessions Stripe (pour paiements avec caution)
+        $sql[] = 'CREATE TABLE IF NOT EXISTS `' . _DB_PREFIX_ . 'booking_stripe_sessions` (
+            `id_session` int(10) unsigned NOT NULL AUTO_INCREMENT,
+            `id_reservation` int(10) unsigned NOT NULL,
+            `session_id` VARCHAR(255) NOT NULL,
+            `payment_intent_id` VARCHAR(255) NULL,
+            `status` VARCHAR(50) DEFAULT \'pending\',
+            `date_add` DATETIME NOT NULL,
+            `date_upd` DATETIME NOT NULL,
+            PRIMARY KEY (`id_session`),
+            UNIQUE KEY `idx_session_id` (`session_id`),
+            KEY `idx_reservation` (`id_reservation`),
+            KEY `idx_payment_intent` (`payment_intent_id`),
+            KEY `idx_status` (`status`)
+        ) ENGINE=' . _MYSQL_ENGINE_ . ' DEFAULT CHARSET=utf8';
+
+        // Table des traductions pour les éléments
+        $sql[] = 'CREATE TABLE IF NOT EXISTS `' . _DB_PREFIX_ . 'booker_lang` (
+            `id_booker` int(10) unsigned NOT NULL,
+            `id_lang` int(10) unsigned NOT NULL,
+            `description` TEXT DEFAULT NULL,
+            PRIMARY KEY (`id_booker`, `id_lang`),
+            KEY `idx_booker` (`id_booker`),
+            KEY `idx_lang` (`id_lang`)
+        ) ENGINE=' . _MYSQL_ENGINE_ . ' DEFAULT CHARSET=utf8';
+
+        // Exécution des requêtes SQL avec gestion d'erreurs améliorée
         foreach ($sql as $query) {
             if (!Db::getInstance()->execute($query)) {
                 // Log l'erreur pour diagnostic
@@ -222,7 +255,7 @@ class Booking extends Module  {
     }
 
     /**
-     * Installation des onglets d'administration
+     * Installation des onglets d'administration - VERSION ÉTENDUE
      */
     private function installTab()
     {
@@ -259,6 +292,11 @@ class Booking extends Module  {
                 'parent_class_name' => 'AdminBooking'
             ),
             array(
+                'class_name' => 'AdminBookerReservations',
+                'name' => 'Gestion Réservations',
+                'parent_class_name' => 'AdminBooking'
+            ),
+            array(
                 'class_name' => 'AdminBookerView',
                 'name' => 'Vue Calendriers',
                 'parent_class_name' => 'AdminBooking'
@@ -266,6 +304,11 @@ class Booking extends Module  {
             array(
                 'class_name' => 'AdminBookerSettings',
                 'name' => 'Paramètres',
+                'parent_class_name' => 'AdminBooking'
+            ),
+            array(
+                'class_name' => 'AdminBookerStats',
+                'name' => 'Statistiques',
                 'parent_class_name' => 'AdminBooking'
             )
         );
@@ -307,8 +350,10 @@ class Booking extends Module  {
             'AdminBookerAuthReserved',
             'AdminBookerCalendarAvailability',
             'AdminBookerCalendarReservations',
+            'AdminBookerReservations',
             'AdminBookerView',
             'AdminBookerSettings',
+            'AdminBookerStats',
             'AdminBooking'
         );
 
@@ -326,39 +371,71 @@ class Booking extends Module  {
     }
 
     /**
-     * Installation des configurations
+     * Installation des configurations étendues
      */
     private function installConfiguration()
     {
         $configurations = array(
+            // Paramètres de base
             'BOOKING_DEFAULT_PRICE' => '50.00',
             'BOOKING_DEPOSIT_AMOUNT' => '20.00',
             'BOOKING_DEFAULT_DURATION' => '60',
             'BOOKING_EXPIRY_HOURS' => '24',
             'BOOKING_AUTO_CONFIRM' => '0',
             'BOOKING_MULTI_SELECT' => '1',
+            
+            // Horaires d'ouverture
             'BOOKING_BUSINESS_HOURS_START' => '08:00',
             'BOOKING_BUSINESS_HOURS_END' => '18:00',
             'BOOKING_ALLOWED_DAYS' => '1,2,3,4,5,6,7',
+            'BOOKING_CALENDAR_MIN_TIME' => '08:00',
+            'BOOKING_CALENDAR_MAX_TIME' => '20:00',
+            'BOOKING_SLOT_DURATION' => '00:30:00',
+            
+            // Notifications
             'BOOKING_NOTIFICATIONS_ENABLED' => '1',
             'BOOKING_AUTO_CONFIRMATION_EMAIL' => '1',
             'BOOKING_AUTO_REMINDERS' => '0',
             'BOOKING_REMINDER_HOURS' => '24',
             'BOOKING_ADMIN_EMAIL' => Configuration::get('PS_SHOP_EMAIL'),
+            
+            // Stripe et paiements
             'BOOKING_STRIPE_ENABLED' => '0',
             'BOOKING_STRIPE_HOLD_DEPOSIT' => '0',
             'BOOKING_SAVE_CARDS' => '0',
+            'BOOKING_STRIPE_PUBLISHABLE_KEY' => '',
+            'BOOKING_STRIPE_SECRET_KEY' => '',
+            
+            // Paramètres avancés
             'BOOKING_DEBUG_MODE' => '0',
             'BOOKING_MIN_BOOKING_TIME' => '24',
             'BOOKING_MAX_BOOKING_DAYS' => '30',
             'BOOKING_SYNC_PRODUCT_PRICE' => '1',
             'BOOKING_SYNC_FROM_PRODUCT' => '0',
+            'BOOKING_AUTO_CREATE_PRODUCT' => '1',
+            'BOOKING_DELETE_LINKED_PRODUCT' => '0',
+            
+            // Intégrations
             'BOOKING_DEFAULT_CATEGORY' => Configuration::get('PS_HOME_CATEGORY'),
             'BOOKING_DEFAULT_TAX_RULES_GROUP' => '1',
             'BOOKING_STATUS_PENDING_PAYMENT' => Configuration::get('PS_OS_BANKWIRE'),
-            'BOOKING_CALENDAR_MIN_TIME' => '08:00',
-            'BOOKING_CALENDAR_MAX_TIME' => '20:00',
-            'BOOKING_SLOT_DURATION' => '00:30:00'
+            'BOOKING_GOOGLE_CALENDAR_SYNC' => '0',
+            'BOOKING_GOOGLE_API_KEY' => '',
+            
+            // Interface et calendriers
+            'BOOKING_CALENDAR_THEME' => 'default',
+            'BOOKING_CALENDAR_VIEW' => 'dayGridMonth',
+            'BOOKING_CALENDAR_FIRST_DAY' => '1',
+            'BOOKING_CALENDAR_WEEK_NUMBERS' => '0',
+            'BOOKING_CALENDAR_ALL_DAY' => '0',
+            
+            // Sécurité et performances
+            'BOOKING_CACHE_ENABLED' => '1',
+            'BOOKING_CACHE_LIFETIME' => '3600',
+            'BOOKING_MAX_SIMULTANEOUS_BOOKINGS' => '5',
+            'BOOKING_RATE_LIMIT_ENABLED' => '1',
+            'BOOKING_RATE_LIMIT_REQUESTS' => '10',
+            'BOOKING_RATE_LIMIT_WINDOW' => '60'
         );
 
         foreach ($configurations as $key => $value) {
@@ -376,34 +453,21 @@ class Booking extends Module  {
     private function uninstallConfiguration()
     {
         $configurations = array(
-            'BOOKING_DEFAULT_PRICE',
-            'BOOKING_DEPOSIT_AMOUNT', 
-            'BOOKING_DEFAULT_DURATION',
-            'BOOKING_EXPIRY_HOURS',
-            'BOOKING_AUTO_CONFIRM',
-            'BOOKING_MULTI_SELECT',
-            'BOOKING_BUSINESS_HOURS_START',
-            'BOOKING_BUSINESS_HOURS_END',
-            'BOOKING_ALLOWED_DAYS',
-            'BOOKING_NOTIFICATIONS_ENABLED',
-            'BOOKING_AUTO_CONFIRMATION_EMAIL',
-            'BOOKING_AUTO_REMINDERS',
-            'BOOKING_REMINDER_HOURS',
-            'BOOKING_ADMIN_EMAIL',
-            'BOOKING_STRIPE_ENABLED',
-            'BOOKING_STRIPE_HOLD_DEPOSIT',
-            'BOOKING_SAVE_CARDS',
-            'BOOKING_DEBUG_MODE',
-            'BOOKING_MIN_BOOKING_TIME',
-            'BOOKING_MAX_BOOKING_DAYS',
-            'BOOKING_SYNC_PRODUCT_PRICE',
-            'BOOKING_SYNC_FROM_PRODUCT',
-            'BOOKING_DEFAULT_CATEGORY',
-            'BOOKING_DEFAULT_TAX_RULES_GROUP',
-            'BOOKING_STATUS_PENDING_PAYMENT',
-            'BOOKING_CALENDAR_MIN_TIME',
-            'BOOKING_CALENDAR_MAX_TIME',
-            'BOOKING_SLOT_DURATION'
+            'BOOKING_DEFAULT_PRICE', 'BOOKING_DEPOSIT_AMOUNT', 'BOOKING_DEFAULT_DURATION',
+            'BOOKING_EXPIRY_HOURS', 'BOOKING_AUTO_CONFIRM', 'BOOKING_MULTI_SELECT',
+            'BOOKING_BUSINESS_HOURS_START', 'BOOKING_BUSINESS_HOURS_END', 'BOOKING_ALLOWED_DAYS',
+            'BOOKING_CALENDAR_MIN_TIME', 'BOOKING_CALENDAR_MAX_TIME', 'BOOKING_SLOT_DURATION',
+            'BOOKING_NOTIFICATIONS_ENABLED', 'BOOKING_AUTO_CONFIRMATION_EMAIL', 'BOOKING_AUTO_REMINDERS',
+            'BOOKING_REMINDER_HOURS', 'BOOKING_ADMIN_EMAIL', 'BOOKING_STRIPE_ENABLED',
+            'BOOKING_STRIPE_HOLD_DEPOSIT', 'BOOKING_SAVE_CARDS', 'BOOKING_STRIPE_PUBLISHABLE_KEY',
+            'BOOKING_STRIPE_SECRET_KEY', 'BOOKING_DEBUG_MODE', 'BOOKING_MIN_BOOKING_TIME',
+            'BOOKING_MAX_BOOKING_DAYS', 'BOOKING_SYNC_PRODUCT_PRICE', 'BOOKING_SYNC_FROM_PRODUCT',
+            'BOOKING_AUTO_CREATE_PRODUCT', 'BOOKING_DELETE_LINKED_PRODUCT', 'BOOKING_DEFAULT_CATEGORY',
+            'BOOKING_DEFAULT_TAX_RULES_GROUP', 'BOOKING_STATUS_PENDING_PAYMENT', 'BOOKING_GOOGLE_CALENDAR_SYNC',
+            'BOOKING_GOOGLE_API_KEY', 'BOOKING_CALENDAR_THEME', 'BOOKING_CALENDAR_VIEW',
+            'BOOKING_CALENDAR_FIRST_DAY', 'BOOKING_CALENDAR_WEEK_NUMBERS', 'BOOKING_CALENDAR_ALL_DAY',
+            'BOOKING_CACHE_ENABLED', 'BOOKING_CACHE_LIFETIME', 'BOOKING_MAX_SIMULTANEOUS_BOOKINGS',
+            'BOOKING_RATE_LIMIT_ENABLED', 'BOOKING_RATE_LIMIT_REQUESTS', 'BOOKING_RATE_LIMIT_WINDOW'
         );
 
         foreach ($configurations as $key) {
@@ -420,6 +484,8 @@ class Booking extends Module  {
     {
         $sql = array();
         
+        $sql[] = 'DROP TABLE IF EXISTS `' . _DB_PREFIX_ . 'booker_lang`';
+        $sql[] = 'DROP TABLE IF EXISTS `' . _DB_PREFIX_ . 'booking_stripe_sessions`';
         $sql[] = 'DROP TABLE IF EXISTS `' . _DB_PREFIX_ . 'booking_activity_log`';
         $sql[] = 'DROP TABLE IF EXISTS `' . _DB_PREFIX_ . 'booker_reservation_order`';
         $sql[] = 'DROP TABLE IF EXISTS `' . _DB_PREFIX_ . 'booker_product`';
@@ -457,7 +523,7 @@ class Booking extends Module  {
     }
 
     /**
-     * Hook back-office header
+     * Hook back-office header avec chargement des scripts calendrier
      */
     public function hookDisplayBackOfficeHeader()
     {
@@ -467,14 +533,76 @@ class Booking extends Module  {
             $this->context->controller->addCSS($this->_path . 'views/css/admin-calendar.css');
             $this->context->controller->addJS([
                 'https://cdnjs.cloudflare.com/ajax/libs/fullcalendar/6.1.8/index.global.min.js',
+                'https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.29.4/moment.min.js',
                 $this->_path . 'views/js/availability-calendar.js',
-                $this->_path . 'views/js/reservation-calendar.js'
+                $this->_path . 'views/js/reservation-calendar.js',
+                $this->_path . 'views/js/booking-utils.js'
             ]);
         }
     }
 
     /**
-     * Page de configuration
+     * Hook pour traitement des cron jobs
+     */
+    public function hookActionCronJob()
+    {
+        // Nettoyer les réservations expirées
+        $this->cleanExpiredReservations();
+        
+        // Envoyer les rappels de réservation
+        if (Configuration::get('BOOKING_AUTO_REMINDERS')) {
+            $this->sendBookingReminders();
+        }
+        
+        // Synchroniser avec Google Calendar si activé
+        if (Configuration::get('BOOKING_GOOGLE_CALENDAR_SYNC')) {
+            $this->syncGoogleCalendar();
+        }
+    }
+
+    /**
+     * Nettoyer les réservations expirées
+     */
+    private function cleanExpiredReservations()
+    {
+        $sql = 'UPDATE `' . _DB_PREFIX_ . 'booker_auth_reserved` 
+                SET `status` = 5 
+                WHERE `status` = 0 
+                AND `date_expiry` < NOW()';
+        
+        Db::getInstance()->execute($sql);
+    }
+
+    /**
+     * Envoyer les rappels de réservation
+     */
+    private function sendBookingReminders()
+    {
+        $reminder_hours = Configuration::get('BOOKING_REMINDER_HOURS', 24);
+        
+        $sql = 'SELECT * FROM `' . _DB_PREFIX_ . 'booker_auth_reserved` 
+                WHERE `status` IN (1, 3) 
+                AND `date_reserved` = DATE_ADD(CURDATE(), INTERVAL ' . (int)$reminder_hours . ' HOUR)';
+        
+        $reservations = Db::getInstance()->executeS($sql);
+        
+        foreach ($reservations as $reservation) {
+            // Envoyer email de rappel
+            $this->sendReminderEmail($reservation);
+        }
+    }
+
+    /**
+     * Synchroniser avec Google Calendar
+     */
+    private function syncGoogleCalendar()
+    {
+        // À implémenter selon les besoins
+        // Utiliser l'API Google Calendar pour synchroniser les réservations
+    }
+
+    /**
+     * Page de configuration étendue
      */
     public function getContent()
     {
@@ -502,7 +630,7 @@ class Booking extends Module  {
     }
 
     /**
-     * Affichage du formulaire de configuration
+     * Affichage du formulaire de configuration étendu
      */
     private function displayForm()
     {
@@ -529,7 +657,7 @@ class Booking extends Module  {
     }
 
     /**
-     * Structure du formulaire de configuration
+     * Structure du formulaire de configuration étendu
      */
     private function getConfigForm()
     {
@@ -584,6 +712,30 @@ class Booking extends Module  {
                     ),
                     array(
                         'type' => 'switch',
+                        'label' => $this->l('Paiements Stripe'),
+                        'name' => 'BOOKING_STRIPE_ENABLED',
+                        'values' => array(
+                            array('id' => 'stripe_on', 'value' => 1, 'label' => $this->l('Activé')),
+                            array('id' => 'stripe_off', 'value' => 0, 'label' => $this->l('Désactivé'))
+                        ),
+                        'desc' => $this->l('Activer les paiements et cautions via Stripe'),
+                    ),
+                    array(
+                        'type' => 'text',
+                        'label' => $this->l('Clé publique Stripe'),
+                        'name' => 'BOOKING_STRIPE_PUBLISHABLE_KEY',
+                        'size' => 50,
+                        'desc' => $this->l('Clé publique de votre compte Stripe'),
+                    ),
+                    array(
+                        'type' => 'text',
+                        'label' => $this->l('Clé secrète Stripe'),
+                        'name' => 'BOOKING_STRIPE_SECRET_KEY',
+                        'size' => 50,
+                        'desc' => $this->l('Clé secrète de votre compte Stripe'),
+                    ),
+                    array(
+                        'type' => 'switch',
                         'label' => $this->l('Synchroniser prix produits'),
                         'name' => 'BOOKING_SYNC_PRODUCT_PRICE',
                         'values' => array(
@@ -611,7 +763,40 @@ class Booking extends Module  {
             'BOOKING_DEFAULT_DURATION' => Configuration::get('BOOKING_DEFAULT_DURATION'),
             'BOOKING_EXPIRY_HOURS' => Configuration::get('BOOKING_EXPIRY_HOURS'),
             'BOOKING_AUTO_CONFIRM' => Configuration::get('BOOKING_AUTO_CONFIRM'),
+            'BOOKING_STRIPE_ENABLED' => Configuration::get('BOOKING_STRIPE_ENABLED'),
+            'BOOKING_STRIPE_PUBLISHABLE_KEY' => Configuration::get('BOOKING_STRIPE_PUBLISHABLE_KEY'),
+            'BOOKING_STRIPE_SECRET_KEY' => Configuration::get('BOOKING_STRIPE_SECRET_KEY'),
             'BOOKING_SYNC_PRODUCT_PRICE' => Configuration::get('BOOKING_SYNC_PRODUCT_PRICE'),
+        );
+    }
+
+    /**
+     * Envoi d'email de rappel
+     */
+    private function sendReminderEmail($reservation)
+    {
+        $template_vars = array(
+            '{booking_reference}' => $reservation['booking_reference'],
+            '{customer_name}' => $reservation['customer_firstname'] . ' ' . $reservation['customer_lastname'],
+            '{date_reserved}' => $reservation['date_reserved'],
+            '{hour_from}' => $reservation['hour_from'],
+            '{hour_to}' => $reservation['hour_to']
+        );
+
+        return Mail::Send(
+            $this->context->language->id,
+            'booking_reminder',
+            $this->l('Rappel de votre réservation'),
+            $template_vars,
+            $reservation['customer_email'],
+            $reservation['customer_firstname'] . ' ' . $reservation['customer_lastname'],
+            null,
+            null,
+            null,
+            null,
+            dirname(__FILE__) . '/mails/',
+            false,
+            $this->context->shop->id
         );
     }
 }
