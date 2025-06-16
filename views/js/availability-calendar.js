@@ -1,798 +1,626 @@
 /**
- * Gestionnaire du calendrier des disponibilités
- * Gestion complète des créneaux de disponibilité, création en lot et copie
+ * JavaScript pour le calendrier de gestion des disponibilités
+ * Utilise FullCalendar pour une interface interactive moderne
  */
 
-document.addEventListener('DOMContentLoaded', function() {
-    
-    let calendar;
-    let currentModal = null;
-    let pendingAction = null;
-    let selectedEvents = [];
-    
-    // Initialisation du calendrier
-    initializeCalendar();
-    
-    // Gestionnaires d'événements
-    setupEventHandlers();
+var AvailabilityCalendar = {
+    calendar: null,
+    selectedEvents: [],
+    currentBookerFilter: '',
     
     /**
-     * Initialisation du calendrier FullCalendar
+     * Initialisation du calendrier
      */
-    function initializeCalendar() {
-        const calendarEl = document.getElementById('calendar');
-        
-        if (!calendarEl) {
-            console.error('Élément calendrier non trouvé');
-            return;
-        }
-        
-        // Vérifier que FullCalendar est chargé
-        if (typeof FullCalendar === 'undefined') {
-            console.error('FullCalendar non chargé');
-            return;
-        }
-        
-        // Vérifier que AvailabilityCalendar est défini
-        if (typeof AvailabilityCalendar === 'undefined') {
-            console.error('AvailabilityCalendar non défini');
-            return;
-        }
-        
-        calendar = new FullCalendar.Calendar(calendarEl, {
-            locale: AvailabilityCalendar.config.locale || 'fr',
-            initialView: AvailabilityCalendar.config.default_view || 'timeGridWeek',
-            initialDate: AvailabilityCalendar.currentDate,
-            
+    init: function() {
+        var calendarEl = document.getElementById('calendar');
+        if (!calendarEl) return;
+
+        this.calendar = new FullCalendar.Calendar(calendarEl, {
+            initialView: 'dayGridMonth',
             headerToolbar: {
-                left: '',
+                left: 'prev,next today',
                 center: 'title',
-                right: ''
+                right: 'dayGridMonth,timeGridWeek,timeGridDay'
             },
-            
+            locale: 'fr',
+            firstDay: bookingCalendarConfig.firstDay || 1,
+            slotMinTime: bookingCalendarConfig.minTime || '08:00',
+            slotMaxTime: bookingCalendarConfig.maxTime || '20:00',
+            slotDuration: bookingCalendarConfig.slotDuration || '00:30:00',
             height: 'auto',
-            
-            businessHours: AvailabilityCalendar.config.business_hours,
-            
             selectable: true,
             selectMirror: true,
-            selectOverlap: false,
+            editable: true,
+            eventResizableFromStart: true,
+            businessHours: bookingCalendarConfig.businessHours,
             
-            eventClick: function(info) {
-                handleEventClick(info);
+            // Sources d'événements
+            events: {
+                url: ajaxUrl,
+                method: 'POST',
+                extraParams: {
+                    ajax: 1,
+                    action: 'getAvailabilities',
+                    token: currentToken
+                },
+                failure: function() {
+                    AvailabilityCalendar.showMessage('Erreur lors du chargement des données', 'error');
+                }
             },
-            
-            select: function(info) {
-                handleDateSelection(info);
-            },
-            
-            dateClick: function(info) {
-                handleDateClick(info);
-            },
-            
-            eventDrop: function(info) {
-                handleEventDrop(info);
-            },
-            
-            eventResize: function(info) {
-                handleEventResize(info);
-            },
-            
-            events: function(info, successCallback, failureCallback) {
-                loadAvailabilities(info.startStr, info.endStr, successCallback, failureCallback);
-            },
-            
-            eventDidMount: function(info) {
-                setupEventTooltip(info);
-                setupEventInteraction(info);
-            },
-            
-            loading: function(isLoading) {
-                document.getElementById('calendar-loading').style.display = isLoading ? 'block' : 'none';
-                document.getElementById('calendar').style.display = isLoading ? 'none' : 'block';
+
+            // Callbacks
+            select: this.handleSelect.bind(this),
+            eventClick: this.handleEventClick.bind(this),
+            eventDrop: this.handleEventDrop.bind(this),
+            eventResize: this.handleEventResize.bind(this),
+            eventDidMount: this.handleEventDidMount.bind(this)
+        });
+
+        this.calendar.render();
+        this.initEventHandlers();
+    },
+
+    /**
+     * Initialisation des gestionnaires d'événements
+     */
+    initEventHandlers: function() {
+        // Filtrage par booker
+        $('#booker-filter').on('change', function() {
+            AvailabilityCalendar.currentBookerFilter = $(this).val();
+            AvailabilityCalendar.refreshCalendar();
+        });
+
+        // Bouton ajouter disponibilité
+        $('#add-availability').on('click', function() {
+            AvailabilityCalendar.showCreateModal();
+        });
+
+        // Actions groupées
+        $('#bulk-actions').on('click', function() {
+            if (AvailabilityCalendar.selectedEvents.length > 0) {
+                AvailabilityCalendar.showBulkActionsModal();
             }
         });
-        
-        calendar.render();
-    }
-    
-    /**
-     * Configuration des gestionnaires d'événements
-     */
-    function setupEventHandlers() {
-        // Navigation du calendrier
-        document.getElementById('prev-btn')?.addEventListener('click', function() {
-            calendar.prev();
+
+        // Sélection multiple avec Ctrl+Click
+        $(document).on('keydown keyup', function(e) {
+            if (e.ctrlKey || e.metaKey) {
+                $('body').addClass('multi-select-mode');
+            } else {
+                $('body').removeClass('multi-select-mode');
+            }
         });
-        
-        document.getElementById('next-btn')?.addEventListener('click', function() {
-            calendar.next();
+    },
+
+    /**
+     * Gestionnaire de sélection de période
+     */
+    handleSelect: function(selectInfo) {
+        this.showCreateModal({
+            start: selectInfo.start,
+            end: selectInfo.end
         });
-        
-        document.getElementById('today-btn')?.addEventListener('click', function() {
-            calendar.today();
-        });
-        
-        // Sélecteur de vue
-        document.querySelectorAll('#view-selector .btn').forEach(btn => {
-            btn.addEventListener('click', function() {
-                const view = this.dataset.view;
-                calendar.changeView(view);
-                
-                // Mettre à jour l'apparence des boutons
-                document.querySelectorAll('#view-selector .btn').forEach(b => b.classList.remove('active'));
-                this.classList.add('active');
-            });
-        });
-        
-        // Filtre par booker
-        document.getElementById('booker-filter')?.addEventListener('change', function() {
-            calendar.refetchEvents();
-        });
-        
-        // Actions en lot
-        document.getElementById('bulk-create-btn')?.addEventListener('click', showBulkCreateModal);
-        document.getElementById('copy-week-btn')?.addEventListener('click', showCopyWeekModal);
-        document.getElementById('recurring-btn')?.addEventListener('click', showRecurringModal);
-        document.getElementById('export-btn')?.addEventListener('click', exportAvailabilities);
-        
-        // Boutons de modal
-        document.getElementById('save-availability-btn')?.addEventListener('click', saveAvailability);
-        document.getElementById('execute-bulk-create-btn')?.addEventListener('click', executeBulkCreate);
-        document.getElementById('execute-copy-week-btn')?.addEventListener('click', executeCopyWeek);
-        
-        // Gestion des modales
-        setupModalHandlers();
-    }
-    
+        this.calendar.unselect();
+    },
+
     /**
-     * Charger les disponibilités
+     * Gestionnaire de clic sur événement
      */
-    function loadAvailabilities(start, end, successCallback, failureCallback) {
-        const bookerId = document.getElementById('booker-filter')?.value || '';
-        
-        const params = {
-            start: start,
-            end: end,
-            booker_id: bookerId
-        };
-        
-        fetch(AvailabilityCalendar.ajaxUrls.get_availabilities + '&' + new URLSearchParams(params))
-            .then(response => response.json())
-            .then(data => {
-                if (data.error) {
-                    console.error('Erreur chargement disponibilités:', data.error);
-                    failureCallback(data.error);
-                    return;
-                }
-                successCallback(data);
-            })
-            .catch(error => {
-                console.error('Erreur AJAX:', error);
-                failureCallback(error);
-            });
-    }
-    
-    /**
-     * Gestion du clic sur un événement
-     */
-    function handleEventClick(info) {
-        const eventProps = info.event.extendedProps;
-        
-        if (eventProps.type === 'availability') {
-            showAvailabilityDetails(eventProps.availability_id);
-        }
-    }
-    
-    /**
-     * Gestion de la sélection de dates
-     */
-    function handleDateSelection(info) {
-        showCreateAvailabilityModal(info.start, info.end);
-        calendar.unselect();
-    }
-    
-    /**
-     * Gestion du clic sur une date
-     */
-    function handleDateClick(info) {
-        const endDate = new Date(info.date);
-        endDate.setHours(endDate.getHours() + 1);
-        
-        showCreateAvailabilityModal(info.date, endDate);
-    }
-    
-    /**
-     * Gestion du déplacement d'événement
-     */
-    function handleEventDrop(info) {
-        const eventProps = info.event.extendedProps;
-        
-        if (eventProps.type === 'availability') {
-            updateAvailabilityDateTime(eventProps.availability_id, info.event.start, info.event.end);
-        }
-    }
-    
-    /**
-     * Gestion du redimensionnement d'événement
-     */
-    function handleEventResize(info) {
-        const eventProps = info.event.extendedProps;
-        
-        if (eventProps.type === 'availability') {
-            updateAvailabilityDateTime(eventProps.availability_id, info.event.start, info.event.end);
-        }
-    }
-    
-    /**
-     * Configuration des tooltips pour les événements
-     */
-    function setupEventTooltip(info) {
-        const eventProps = info.event.extendedProps;
-        
-        if (eventProps.type === 'availability') {
-            const tooltip = `
-                <strong>${eventProps.booker_name}</strong><br>
-                Réservations: ${eventProps.current_bookings}/${eventProps.max_bookings}<br>
-                Prix: ${eventProps.price_override || eventProps.booker_price}€<br>
-                ${eventProps.notes ? 'Notes: ' + eventProps.notes : ''}
-            `;
-            
-            info.el.setAttribute('data-tooltip', tooltip);
-            info.el.setAttribute('title', tooltip.replace(/<[^>]*>/g, ''));
-        }
-    }
-    
-    /**
-     * Configuration des interactions sur les événements
-     */
-    function setupEventInteraction(info) {
-        const eventProps = info.event.extendedProps;
-        
-        if (eventProps.type === 'availability') {
-            // Double-clic pour éditer
-            info.el.addEventListener('dblclick', function() {
-                showEditAvailabilityModal(eventProps.availability_id);
-            });
-            
-            // Clic droit pour menu contextuel
-            info.el.addEventListener('contextmenu', function(e) {
-                e.preventDefault();
-                showContextMenu(e, eventProps.availability_id);
-            });
-        }
-    }
-    
-    /**
-     * Afficher les détails d'une disponibilité
-     */
-    function showAvailabilityDetails(availabilityId) {
-        fetch(AvailabilityCalendar.ajaxUrls.get_availability_details + '&id=' + availabilityId)
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    showAvailabilityModal(data.data, false);
-                } else {
-                    showNotification('error', data.message || AvailabilityCalendar.messages.error_loading);
-                }
-            })
-            .catch(error => {
-                console.error('Erreur:', error);
-                showNotification('error', AvailabilityCalendar.messages.error_loading);
-            });
-    }
-    
-    /**
-     * Afficher la modal de création de disponibilité
-     */
-    function showCreateAvailabilityModal(startDate, endDate) {
-        resetAvailabilityModal();
-        
-        // Pré-remplir les dates
-        if (startDate) {
-            const start = new Date(startDate);
-            document.getElementById('availability-date-from').value = formatDate(start);
-            document.getElementById('availability-time-from').value = formatTime(start);
-        }
-        
-        if (endDate) {
-            const end = new Date(endDate);
-            document.getElementById('availability-date-to').value = formatDate(end);
-            document.getElementById('availability-time-to').value = formatTime(end);
-        }
-        
-        document.getElementById('modal-title').textContent = 'Nouvelle disponibilité';
-        showModal('availability-modal');
-    }
-    
-    /**
-     * Afficher la modal d'édition de disponibilité
-     */
-    function showEditAvailabilityModal(availabilityId) {
-        fetch(AvailabilityCalendar.ajaxUrls.get_availability_details + '&id=' + availabilityId)
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    showAvailabilityModal(data.data, true);
-                } else {
-                    showNotification('error', data.message || AvailabilityCalendar.messages.error_loading);
-                }
-            })
-            .catch(error => {
-                console.error('Erreur:', error);
-                showNotification('error', AvailabilityCalendar.messages.error_loading);
-            });
-    }
-    
-    /**
-     * Afficher la modal de disponibilité
-     */
-    function showAvailabilityModal(availability, isEdit) {
-        resetAvailabilityModal();
-        
-        if (isEdit) {
-            document.getElementById('availability-id').value = availability.id;
-            document.getElementById('modal-title').textContent = 'Modifier la disponibilité';
+    handleEventClick: function(clickInfo) {
+        if ($('body').hasClass('multi-select-mode')) {
+            // Mode sélection multiple
+            this.toggleEventSelection(clickInfo.event);
         } else {
-            document.getElementById('modal-title').textContent = 'Détails de la disponibilité';
+            // Mode édition simple
+            this.showEditModal(clickInfo.event);
         }
-        
-        // Remplir les champs
-        document.getElementById('availability-booker').value = availability.id_booker;
-        document.getElementById('availability-max-bookings').value = availability.max_bookings;
-        document.getElementById('availability-date-from').value = formatDate(new Date(availability.date_from));
-        document.getElementById('availability-date-to').value = formatDate(new Date(availability.date_to));
-        document.getElementById('availability-time-from').value = availability.time_from.substring(0, 5);
-        document.getElementById('availability-time-to').value = availability.time_to.substring(0, 5);
-        document.getElementById('availability-price-override').value = availability.price_override || '';
-        document.getElementById('availability-active').value = availability.active;
-        document.getElementById('availability-notes').value = availability.notes || '';
-        document.getElementById('availability-recurring').value = availability.recurring || 0;
-        document.getElementById('availability-recurring-type').value = availability.recurring_type || '';
-        document.getElementById('availability-recurring-end').value = availability.recurring_end || '';
-        
-        showModal('availability-modal');
-    }
-    
+    },
+
     /**
-     * Sauvegarder une disponibilité
+     * Gestionnaire de déplacement d'événement
      */
-    function saveAvailability() {
-        const formData = new FormData(document.getElementById('availability-form'));
-        
-        // Validation côté client
-        if (!validateAvailabilityForm()) {
-            return;
-        }
-        
-        const params = new URLSearchParams();
-        for (let [key, value] of formData.entries()) {
-            params.append(key, value);
-        }
-        
-        fetch(AvailabilityCalendar.ajaxUrls.save_availability, {
-            method: 'POST',
-            body: params
-        })
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                showNotification('success', data.message || AvailabilityCalendar.messages.success_save);
-                hideModal('availability-modal');
-                calendar.refetchEvents();
-            } else {
-                showNotification('error', data.message || 'Erreur lors de la sauvegarde');
-            }
-        })
-        .catch(error => {
-            console.error('Erreur:', error);
-            showNotification('error', 'Erreur lors de la sauvegarde');
-        });
-    }
-    
-    /**
-     * Validation du formulaire de disponibilité
-     */
-    function validateAvailabilityForm() {
-        const requiredFields = ['availability-booker', 'availability-date-from', 'availability-date-to', 'availability-time-from', 'availability-time-to'];
-        
-        for (let fieldId of requiredFields) {
-            const field = document.getElementById(fieldId);
-            if (!field || !field.value.trim()) {
-                showNotification('error', AvailabilityCalendar.messages.validation_required);
-                field?.focus();
-                return false;
-            }
-        }
-        
-        // Validation des dates
-        const dateFrom = new Date(document.getElementById('availability-date-from').value);
-        const dateTo = new Date(document.getElementById('availability-date-to').value);
-        
-        if (dateTo < dateFrom) {
-            showNotification('error', AvailabilityCalendar.messages.validation_date_range);
-            return false;
-        }
-        
-        // Validation des heures
-        const timeFrom = document.getElementById('availability-time-from').value;
-        const timeTo = document.getElementById('availability-time-to').value;
-        
-        if (timeTo <= timeFrom) {
-            showNotification('error', AvailabilityCalendar.messages.validation_time_range);
-            return false;
-        }
-        
-        return true;
-    }
-    
-    /**
-     * Mettre à jour la date/heure d'une disponibilité (drag & drop)
-     */
-    function updateAvailabilityDateTime(availabilityId, startDate, endDate) {
-        const params = new URLSearchParams({
-            id: availabilityId,
-            date_from: formatDate(startDate),
-            date_to: formatDate(endDate),
-            time_from: formatTime(startDate),
-            time_to: formatTime(endDate)
-        });
-        
-        fetch(AvailabilityCalendar.ajaxUrls.update_availability, {
-            method: 'POST',
-            body: params
-        })
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                showNotification('success', 'Disponibilité mise à jour');
-            } else {
-                showNotification('error', data.message || 'Erreur lors de la mise à jour');
-                calendar.refetchEvents(); // Revert changes
-            }
-        })
-        .catch(error => {
-            console.error('Erreur:', error);
-            calendar.refetchEvents(); // Revert changes
-        });
-    }
-    
-    /**
-     * Afficher la modal de création en lot
-     */
-    function showBulkCreateModal() {
-        showModal('bulk-create-modal');
-    }
-    
-    /**
-     * Exécuter la création en lot
-     */
-    function executeBulkCreate() {
-        const formData = new FormData(document.getElementById('bulk-create-form'));
-        
-        // Récupérer les jours sélectionnés
-        const selectedDays = [];
-        document.querySelectorAll('input[name="days[]"]:checked').forEach(checkbox => {
-            selectedDays.push(checkbox.value);
-        });
-        
-        if (selectedDays.length === 0) {
-            showNotification('error', 'Veuillez sélectionner au moins un jour');
-            return;
-        }
-        
-        const params = new URLSearchParams();
-        for (let [key, value] of formData.entries()) {
-            if (key !== 'days[]') {
-                params.append(key, value);
-            }
-        }
-        selectedDays.forEach(day => params.append('days[]', day));
-        
-        fetch(AvailabilityCalendar.ajaxUrls.bulk_create, {
-            method: 'POST',
-            body: params
-        })
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                showNotification('success', data.message || AvailabilityCalendar.messages.success_bulk_create);
-                hideModal('bulk-create-modal');
-                calendar.refetchEvents();
-            } else {
-                showNotification('error', data.message || 'Erreur lors de la création en lot');
-            }
-        })
-        .catch(error => {
-            console.error('Erreur:', error);
-            showNotification('error', 'Erreur lors de la création en lot');
-        });
-    }
-    
-    /**
-     * Afficher la modal de copie de semaine
-     */
-    function showCopyWeekModal() {
-        // Générer les options de semaines
-        generateWeekOptions();
-        showModal('copy-week-modal');
-    }
-    
-    /**
-     * Générer les options de semaines pour la copie
-     */
-    function generateWeekOptions() {
-        const select = document.getElementById('copy-target-weeks');
-        if (!select) return;
-        
-        select.innerHTML = '';
-        
-        const today = new Date();
-        for (let i = 1; i <= 26; i++) { // 26 semaines à venir
-            const date = new Date(today);
-            date.setDate(date.getDate() + (i * 7));
-            
-            const year = date.getFullYear();
-            const week = getWeekNumber(date);
-            const weekValue = year + '-W' + (week < 10 ? '0' : '') + week;
-            const weekLabel = 'Semaine ' + week + ' (' + formatDateRange(date) + ')';
-            
-            const option = document.createElement('option');
-            option.value = weekValue;
-            option.textContent = weekLabel;
-            select.appendChild(option);
-        }
-    }
-    
-    /**
-     * Exécuter la copie de semaine
-     */
-    function executeCopyWeek() {
-        const sourceWeek = document.getElementById('copy-source-week').value;
-        const targetWeeks = Array.from(document.getElementById('copy-target-weeks').selectedOptions).map(opt => opt.value);
-        
-        if (!sourceWeek || targetWeeks.length === 0) {
-            showNotification('error', 'Veuillez sélectionner une semaine source et au moins une semaine de destination');
-            return;
-        }
-        
-        const params = new URLSearchParams({
-            source_week: sourceWeek
-        });
-        
-        targetWeeks.forEach(week => params.append('target_weeks[]', week));
-        
-        fetch(AvailabilityCalendar.ajaxUrls.copy_week, {
-            method: 'POST',
-            body: params
-        })
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                showNotification('success', data.message || AvailabilityCalendar.messages.success_copy_week);
-                hideModal('copy-week-modal');
-                calendar.refetchEvents();
-            } else {
-                showNotification('error', data.message || 'Erreur lors de la copie');
-            }
-        })
-        .catch(error => {
-            console.error('Erreur:', error);
-            showNotification('error', 'Erreur lors de la copie');
-        });
-    }
-    
-    /**
-     * Exporter les disponibilités
-     */
-    function exportAvailabilities() {
-        const currentView = calendar.view;
-        const start = formatDate(currentView.activeStart);
-        const end = formatDate(currentView.activeEnd);
-        
-        const params = new URLSearchParams({
-            start: start,
-            end: end,
-            format: 'csv'
-        });
-        
-        const url = AvailabilityCalendar.ajaxUrls.export_availabilities + '&' + params.toString();
-        window.location.href = url;
-    }
-    
-    /**
-     * Afficher un menu contextuel
-     */
-    function showContextMenu(event, availabilityId) {
-        // Créer le menu contextuel
-        const menu = document.createElement('div');
-        menu.className = 'context-menu';
-        menu.style.position = 'fixed';
-        menu.style.left = event.pageX + 'px';
-        menu.style.top = event.pageY + 'px';
-        menu.style.zIndex = '9999';
-        menu.style.background = 'white';
-        menu.style.border = '1px solid #ccc';
-        menu.style.borderRadius = '4px';
-        menu.style.boxShadow = '0 2px 10px rgba(0,0,0,0.1)';
-        
-        const actions = [
-            { label: 'Modifier', action: () => showEditAvailabilityModal(availabilityId) },
-            { label: 'Supprimer', action: () => deleteAvailability(availabilityId) },
-            { label: 'Dupliquer', action: () => duplicateAvailability(availabilityId) }
-        ];
-        
-        actions.forEach(item => {
-            const menuItem = document.createElement('div');
-            menuItem.textContent = item.label;
-            menuItem.style.padding = '8px 16px';
-            menuItem.style.cursor = 'pointer';
-            menuItem.addEventListener('click', () => {
-                item.action();
-                document.body.removeChild(menu);
-            });
-            menuItem.addEventListener('mouseenter', () => {
-                menuItem.style.backgroundColor = '#f5f5f5';
-            });
-            menuItem.addEventListener('mouseleave', () => {
-                menuItem.style.backgroundColor = 'white';
-            });
-            menu.appendChild(menuItem);
-        });
-        
-        document.body.appendChild(menu);
-        
-        // Supprimer le menu si on clique ailleurs
-        const removeMenu = (e) => {
-            if (!menu.contains(e.target)) {
-                document.body.removeChild(menu);
-                document.removeEventListener('click', removeMenu);
-            }
+    handleEventDrop: function(dropInfo) {
+        var event = dropInfo.event;
+        var data = {
+            ajax: 1,
+            action: 'updateAvailability',
+            token: currentToken,
+            id_auth: event.extendedProps.id_auth,
+            date_from: this.formatDate(event.start),
+            date_to: this.formatDate(event.end || event.start),
+            time_from: this.formatTime(event.start),
+            time_to: this.formatTime(event.end || event.start)
         };
-        setTimeout(() => document.addEventListener('click', removeMenu), 100);
-    }
-    
+
+        this.sendAjaxRequest(data, function(response) {
+            if (!response.success) {
+                AvailabilityCalendar.showMessage(response.message, 'error');
+                dropInfo.revert();
+            } else {
+                AvailabilityCalendar.showMessage('Disponibilité mise à jour', 'success');
+            }
+        });
+    },
+
+    /**
+     * Gestionnaire de redimensionnement d'événement
+     */
+    handleEventResize: function(resizeInfo) {
+        this.handleEventDrop(resizeInfo); // Même logique que le déplacement
+    },
+
+    /**
+     * Rendu personnalisé des événements
+     */
+    handleEventDidMount: function(info) {
+        var event = info.event;
+        var props = event.extendedProps;
+        
+        // Ajouter des classes CSS selon le type
+        if (props.recurring) {
+            info.el.classList.add('recurring-event');
+        }
+        
+        // Ajouter tooltip avec détails
+        $(info.el).tooltip({
+            title: this.getEventTooltip(event),
+            html: true,
+            placement: 'top'
+        });
+
+        // Ajouter indicateur de capacité
+        var capacityIndicator = document.createElement('div');
+        capacityIndicator.className = 'capacity-indicator';
+        capacityIndicator.innerHTML = props.current_bookings + '/' + props.max_bookings;
+        info.el.appendChild(capacityIndicator);
+    },
+
+    /**
+     * Toggle sélection d'événement
+     */
+    toggleEventSelection: function(event) {
+        var eventId = event.id;
+        var index = this.selectedEvents.indexOf(eventId);
+        
+        if (index > -1) {
+            // Désélectionner
+            this.selectedEvents.splice(index, 1);
+            event.setProp('backgroundColor', event.backgroundColor);
+        } else {
+            // Sélectionner
+            this.selectedEvents.push(eventId);
+            event.setProp('backgroundColor', '#007bff');
+        }
+        
+        // Mettre à jour le bouton d'actions groupées
+        $('#bulk-actions').prop('disabled', this.selectedEvents.length === 0);
+        $('#bulk-actions').text('Actions groupées (' + this.selectedEvents.length + ')');
+    },
+
+    /**
+     * Afficher modal de création
+     */
+    showCreateModal: function(selectInfo) {
+        var modal = this.createModal('Créer une disponibilité', this.getCreateForm(selectInfo));
+        
+        modal.find('.btn-primary').on('click', function() {
+            AvailabilityCalendar.submitCreateForm(modal);
+        });
+        
+        modal.modal('show');
+    },
+
+    /**
+     * Afficher modal d'édition
+     */
+    showEditModal: function(event) {
+        var modal = this.createModal('Modifier la disponibilité', this.getEditForm(event));
+        
+        modal.find('.btn-primary').on('click', function() {
+            AvailabilityCalendar.submitEditForm(modal, event);
+        });
+        
+        modal.find('.btn-danger').on('click', function() {
+            AvailabilityCalendar.deleteAvailability(event.extendedProps.id_auth);
+            modal.modal('hide');
+        });
+        
+        modal.modal('show');
+    },
+
+    /**
+     * Afficher modal d'actions groupées
+     */
+    showBulkActionsModal: function() {
+        var content = `
+            <div class="form-group">
+                <label>Action à effectuer sur ${this.selectedEvents.length} élément(s) sélectionné(s) :</label>
+                <select class="form-control" id="bulk-action-select">
+                    <option value="activate">Activer</option>
+                    <option value="deactivate">Désactiver</option>
+                    <option value="delete">Supprimer</option>
+                </select>
+            </div>
+        `;
+        
+        var modal = this.createModal('Actions groupées', content);
+        
+        modal.find('.btn-primary').on('click', function() {
+            var action = modal.find('#bulk-action-select').val();
+            AvailabilityCalendar.executeBulkAction(action);
+            modal.modal('hide');
+        });
+        
+        modal.modal('show');
+    },
+
+    /**
+     * Générer le formulaire de création
+     */
+    getCreateForm: function(selectInfo) {
+        var startDate = selectInfo ? this.formatDate(selectInfo.start) : '';
+        var endDate = selectInfo ? this.formatDate(selectInfo.end || selectInfo.start) : '';
+        
+        return `
+            <form id="availability-form">
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="form-group">
+                            <label>Élément à réserver *</label>
+                            <select class="form-control" name="id_booker" required>
+                                <option value="">Sélectionner...</option>
+                                ${this.getBookerOptions()}
+                            </select>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="form-group">
+                            <label>Nombre de réservations max *</label>
+                            <input type="number" class="form-control" name="max_bookings" value="1" min="1" required>
+                        </div>
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="form-group">
+                            <label>Date de début *</label>
+                            <input type="date" class="form-control" name="date_from" value="${startDate}" required>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="form-group">
+                            <label>Date de fin *</label>
+                            <input type="date" class="form-control" name="date_to" value="${endDate}" required>
+                        </div>
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="form-group">
+                            <label>Heure de début *</label>
+                            <input type="time" class="form-control" name="time_from" value="08:00" required>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="form-group">
+                            <label>Heure de fin *</label>
+                            <input type="time" class="form-control" name="time_to" value="18:00" required>
+                        </div>
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="form-group">
+                            <label>Prix spécifique</label>
+                            <input type="number" class="form-control" name="price_override" step="0.01" placeholder="Laisser vide = prix du booker">
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="form-group">
+                            <label>
+                                <input type="checkbox" name="recurring" value="1"> Récurrent
+                            </label>
+                        </div>
+                    </div>
+                </div>
+                <div class="recurring-options" style="display: none;">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="form-group">
+                                <label>Type de récurrence</label>
+                                <select class="form-control" name="recurring_type">
+                                    <option value="daily">Quotidien</option>
+                                    <option value="weekly">Hebdomadaire</option>
+                                    <option value="monthly">Mensuel</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="form-group">
+                                <label>Fin de récurrence</label>
+                                <input type="date" class="form-control" name="recurring_end">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Notes internes</label>
+                    <textarea class="form-control" name="notes" rows="3"></textarea>
+                </div>
+            </form>
+        `;
+    },
+
+    /**
+     * Générer le formulaire d'édition
+     */
+    getEditForm: function(event) {
+        var props = event.extendedProps;
+        
+        return `
+            <form id="availability-edit-form">
+                <input type="hidden" name="id_auth" value="${props.id_auth}">
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="form-group">
+                            <label>Élément</label>
+                            <input type="text" class="form-control" value="${props.booker_name}" readonly>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="form-group">
+                            <label>Nombre de réservations max *</label>
+                            <input type="number" class="form-control" name="max_bookings" value="${props.max_bookings}" min="${props.current_bookings}" required>
+                        </div>
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="form-group">
+                            <label>Date de début *</label>
+                            <input type="date" class="form-control" name="date_from" value="${this.formatDate(event.start)}" required>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="form-group">
+                            <label>Date de fin *</label>
+                            <input type="date" class="form-control" name="date_to" value="${this.formatDate(event.end || event.start)}" required>
+                        </div>
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="form-group">
+                            <label>Heure de début *</label>
+                            <input type="time" class="form-control" name="time_from" value="${this.formatTime(event.start)}" required>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="form-group">
+                            <label>Heure de fin *</label>
+                            <input type="time" class="form-control" name="time_to" value="${this.formatTime(event.end || event.start)}" required>
+                        </div>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Prix spécifique</label>
+                    <input type="number" class="form-control" name="price_override" value="${props.price || ''}" step="0.01">
+                </div>
+                <div class="form-group">
+                    <label>Notes internes</label>
+                    <textarea class="form-control" name="notes" rows="3">${props.notes || ''}</textarea>
+                </div>
+            </form>
+        `;
+    },
+
+    /**
+     * Soumettre le formulaire de création
+     */
+    submitCreateForm: function(modal) {
+        var formData = this.serializeForm(modal.find('#availability-form'));
+        formData.ajax = 1;
+        formData.action = 'createAvailability';
+        formData.token = currentToken;
+
+        this.sendAjaxRequest(formData, function(response) {
+            if (response.success) {
+                AvailabilityCalendar.showMessage('Disponibilité créée avec succès', 'success');
+                AvailabilityCalendar.refreshCalendar();
+                modal.modal('hide');
+            } else {
+                AvailabilityCalendar.showMessage(response.message, 'error');
+            }
+        });
+    },
+
+    /**
+     * Soumettre le formulaire d'édition
+     */
+    submitEditForm: function(modal, event) {
+        var formData = this.serializeForm(modal.find('#availability-edit-form'));
+        formData.ajax = 1;
+        formData.action = 'updateAvailability';
+        formData.token = currentToken;
+
+        this.sendAjaxRequest(formData, function(response) {
+            if (response.success) {
+                AvailabilityCalendar.showMessage('Disponibilité mise à jour avec succès', 'success');
+                AvailabilityCalendar.refreshCalendar();
+                modal.modal('hide');
+            } else {
+                AvailabilityCalendar.showMessage(response.message, 'error');
+            }
+        });
+    },
+
     /**
      * Supprimer une disponibilité
      */
-    function deleteAvailability(availabilityId) {
-        if (!confirm(AvailabilityCalendar.messages.confirm_delete)) {
+    deleteAvailability: function(id_auth) {
+        if (!confirm('Êtes-vous sûr de vouloir supprimer cette disponibilité ?')) {
             return;
         }
-        
-        const params = new URLSearchParams({ id: availabilityId });
-        
-        fetch(AvailabilityCalendar.ajaxUrls.delete_availability, {
-            method: 'POST',
-            body: params
-        })
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                showNotification('success', data.message || AvailabilityCalendar.messages.success_delete);
-                calendar.refetchEvents();
+
+        var data = {
+            ajax: 1,
+            action: 'deleteAvailability',
+            token: currentToken,
+            id_auth: id_auth
+        };
+
+        this.sendAjaxRequest(data, function(response) {
+            if (response.success) {
+                AvailabilityCalendar.showMessage('Disponibilité supprimée', 'success');
+                AvailabilityCalendar.refreshCalendar();
             } else {
-                showNotification('error', data.message || 'Erreur lors de la suppression');
+                AvailabilityCalendar.showMessage(response.message, 'error');
             }
-        })
-        .catch(error => {
-            console.error('Erreur:', error);
-            showNotification('error', 'Erreur lors de la suppression');
         });
-    }
-    
+    },
+
     /**
-     * Configuration des modales
+     * Exécuter une action groupée
      */
-    function setupModalHandlers() {
-        // Fermeture des modales avec échap
-        document.addEventListener('keydown', function(e) {
-            if (e.key === 'Escape' && currentModal) {
-                hideModal(currentModal);
+    executeBulkAction: function(action) {
+        var data = {
+            ajax: 1,
+            action: 'bulkAction',
+            token: currentToken,
+            action: action,
+            ids: this.selectedEvents
+        };
+
+        this.sendAjaxRequest(data, function(response) {
+            AvailabilityCalendar.showMessage(response.message, response.success ? 'success' : 'error');
+            AvailabilityCalendar.selectedEvents = [];
+            AvailabilityCalendar.refreshCalendar();
+            $('#bulk-actions').prop('disabled', true).text('Actions groupées');
+        });
+    },
+
+    /**
+     * Utilitaires
+     */
+    refreshCalendar: function() {
+        if (this.calendar) {
+            var source = this.calendar.getEventSources()[0];
+            if (source) {
+                source.refetch();
             }
+        }
+    },
+
+    createModal: function(title, content) {
+        var modalId = 'availability-modal-' + Date.now();
+        var modal = $(`
+            <div class="modal fade" id="${modalId}" tabindex="-1">
+                <div class="modal-dialog modal-lg">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h4 class="modal-title">${title}</h4>
+                            <button type="button" class="close" data-dismiss="modal">&times;</button>
+                        </div>
+                        <div class="modal-body">${content}</div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-default" data-dismiss="modal">Annuler</button>
+                            <button type="button" class="btn btn-danger" style="display: none;">Supprimer</button>
+                            <button type="button" class="btn btn-primary">Sauvegarder</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `);
+        
+        $('body').append(modal);
+        
+        modal.on('hidden.bs.modal', function() {
+            modal.remove();
         });
         
-        // Fermeture des modales en cliquant sur le fond
-        document.querySelectorAll('.modal').forEach(modal => {
-            modal.addEventListener('click', function(e) {
-                if (e.target === this) {
-                    hideModal(this.id);
+        // Gestion de la récurrence
+        modal.find('input[name="recurring"]').on('change', function() {
+            modal.find('.recurring-options').toggle(this.checked);
+        });
+        
+        return modal;
+    },
+
+    serializeForm: function(form) {
+        var data = {};
+        form.find('input, select, textarea').each(function() {
+            var $this = $(this);
+            var name = $this.attr('name');
+            var value = $this.val();
+            
+            if ($this.attr('type') === 'checkbox') {
+                value = $this.is(':checked') ? 1 : 0;
+            }
+            
+            if (name) {
+                data[name] = value;
+            }
+        });
+        return data;
+    },
+
+    sendAjaxRequest: function(data, callback) {
+        $.post(ajaxUrl, data)
+            .done(function(response) {
+                try {
+                    var result = typeof response === 'string' ? JSON.parse(response) : response;
+                    callback(result);
+                } catch (e) {
+                    callback({ success: false, message: 'Erreur de communication' });
                 }
+            })
+            .fail(function() {
+                callback({ success: false, message: 'Erreur de communication' });
             });
-        });
-    }
-    
-    /**
-     * Fonctions utilitaires
-     */
-    
-    function showModal(modalId) {
-        const modal = document.getElementById(modalId);
-        if (modal) {
-            modal.style.display = 'block';
-            modal.classList.add('show');
-            currentModal = modalId;
-        }
-    }
-    
-    function hideModal(modalId) {
-        const modal = document.getElementById(modalId);
-        if (modal) {
-            modal.style.display = 'none';
-            modal.classList.remove('show');
-            currentModal = null;
-        }
-    }
-    
-    function resetAvailabilityModal() {
-        document.getElementById('availability-form').reset();
-        document.getElementById('availability-id').value = '';
-    }
-    
-    function showNotification(type, message) {
-        // Créer la notification
-        const notification = document.createElement('div');
-        notification.className = `alert alert-${type === 'success' ? 'success' : 'danger'}`;
-        notification.style.position = 'fixed';
-        notification.style.top = '20px';
-        notification.style.right = '20px';
-        notification.style.zIndex = '10000';
-        notification.style.minWidth = '300px';
-        notification.innerHTML = `
-            <button type="button" class="close" onclick="this.parentElement.remove()">
-                <span>&times;</span>
-            </button>
+    },
+
+    showMessage: function(message, type) {
+        var alertClass = type === 'success' ? 'alert-success' : 'alert-danger';
+        var alert = $(`<div class="alert ${alertClass} alert-dismissible">
+            <button type="button" class="close" data-dismiss="alert">&times;</button>
             ${message}
-        `;
+        </div>`);
         
-        document.body.appendChild(notification);
+        $('.booking-calendar-container').prepend(alert);
         
-        // Suppression automatique après 5 secondes
-        setTimeout(() => {
-            if (notification.parentElement) {
-                notification.remove();
-            }
+        setTimeout(function() {
+            alert.fadeOut();
         }, 5000);
+    },
+
+    formatDate: function(date) {
+        return moment(date).format('YYYY-MM-DD');
+    },
+
+    formatTime: function(date) {
+        return moment(date).format('HH:mm');
+    },
+
+    getEventTooltip: function(event) {
+        var props = event.extendedProps;
+        return `
+            <strong>${props.booker_name}</strong><br>
+            Réservations: ${props.current_bookings}/${props.max_bookings}<br>
+            Prix: ${props.price}€<br>
+            ${props.notes ? 'Notes: ' + props.notes : ''}
+        `;
+    },
+
+    getBookerOptions: function() {
+        // Cette fonction devrait être alimentée par les données du serveur
+        // Pour l'instant, on retourne une chaîne vide
+        return '';
     }
-    
-    function formatDate(date) {
-        const d = new Date(date);
-        const month = (d.getMonth() + 1).toString().padStart(2, '0');
-        const day = d.getDate().toString().padStart(2, '0');
-        return d.getFullYear() + '-' + month + '-' + day;
-    }
-    
-    function formatTime(date) {
-        const d = new Date(date);
-        const hours = d.getHours().toString().padStart(2, '0');
-        const minutes = d.getMinutes().toString().padStart(2, '0');
-        return hours + ':' + minutes;
-    }
-    
-    function getWeekNumber(date) {
-        const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
-        const dayNum = d.getUTCDay() || 7;
-        d.setUTCDate(d.getUTCDate() + 4 - dayNum);
-        const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
-        return Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
-    }
-    
-    function formatDateRange(date) {
-        const monday = new Date(date);
-        monday.setDate(date.getDate() - date.getDay() + 1);
-        const sunday = new Date(monday);
-        sunday.setDate(monday.getDate() + 6);
-        
-        return formatDate(monday) + ' au ' + formatDate(sunday);
-    }
-    
-    function showRecurringModal() {
-        // À implémenter pour les créneaux récurrents
-        alert('Fonction de récurrence à implémenter');
-    }
-    
-    function duplicateAvailability(availabilityId) {
-        // À implémenter pour la duplication
-        alert('Fonction de duplication à implémenter');
+};
+
+// Initialisation au chargement de la page
+$(document).ready(function() {
+    if (typeof bookingCalendarConfig !== 'undefined' && typeof ajaxUrl !== 'undefined') {
+        AvailabilityCalendar.init();
     }
 });
