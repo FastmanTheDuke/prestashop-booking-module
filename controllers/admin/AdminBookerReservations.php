@@ -1,7 +1,7 @@
 <?php
 /**
  * Contrôleur administrateur pour la gestion avancée des réservations
- * Vue orientée validation et actions rapides sur les réservations
+ * Version corrigée - suppression des références à la colonne 'active' inexistante
  */
 
 require_once(dirname(__FILE__) . '/../../classes/Booker.php');
@@ -112,14 +112,6 @@ class AdminBookerReservationsController extends ModuleAdminController
                 'align' => 'center',
                 'type' => 'datetime',
                 'remove_onclick' => true
-            ),
-            'active' => array(
-                'title' => 'Actif', 
-                'filter_key' => 'a!active', 
-                'align' => 'center',
-                'type' => 'bool',
-                'active' => 'status',
-                'remove_onclick' => true
             )
         );
         
@@ -136,14 +128,6 @@ class AdminBookerReservationsController extends ModuleAdminController
             'delete' => array(
                 'text' => 'Supprimer sélectionnés',
                 'icon' => 'icon-trash'
-            ),
-            'enable' => array(
-                'text' => 'Activer sélectionnés',
-                'icon' => 'icon-power-off'
-            ),
-            'disable' => array(
-                'text' => 'Désactiver sélectionnés',
-                'icon' => 'icon-power-off'
             )
         );
         
@@ -158,7 +142,7 @@ class AdminBookerReservationsController extends ModuleAdminController
         $this->_join = 'LEFT JOIN `' . _DB_PREFIX_ . 'booker` b ON (a.id_booker = b.id_booker)';
         $this->_select = 'b.name as booker_name, CONCAT(a.customer_firstname, " ", a.customer_lastname) as customer_name';
         
-        // Filtre par défaut : ne montrer que les réservations récentes
+        // Filtre par défaut : ne montrer que les réservations récentes (SUPPRESSION DE LA CONDITION active = 1)
         $this->_where = 'AND a.date_reserved >= DATE_SUB(NOW(), INTERVAL 6 MONTH)';
         
         parent::__construct();
@@ -173,7 +157,7 @@ class AdminBookerReservationsController extends ModuleAdminController
         $pending_count = $this->getPendingReservationsCount();
         
         $this->page_header_toolbar_btn['stats'] = array(
-            'href' => '#',
+            'href' => $this->context->link->getAdminLink('AdminBookerStats'),
             'desc' => 'Réservations en attente: ' . $pending_count,
             'icon' => 'process-icon-stats'
         );
@@ -190,7 +174,170 @@ class AdminBookerReservationsController extends ModuleAdminController
             'icon' => 'process-icon-export'
         );
         
+        $this->page_header_toolbar_btn['create_orders'] = array(
+            'href' => self::$currentIndex . '&action=createPendingOrders&token=' . $this->token,
+            'desc' => 'Créer commandes en attente',
+            'icon' => 'process-icon-new',
+            'class' => 'btn-success'
+        );
+        
         parent::initPageHeaderToolbar();
+    }
+    
+    /**
+     * Traitement des actions personnalisées
+     */
+    public function postProcess()
+    {
+        if (Tools::getValue('action') === 'createPendingOrders') {
+            $this->createPendingOrders();
+        }
+        
+        return parent::postProcess();
+    }
+    
+    /**
+     * Créer des commandes en attente pour les réservations acceptées
+     */
+    private function createPendingOrders()
+    {
+        $sql = 'SELECT * FROM `' . _DB_PREFIX_ . 'booker_auth_reserved` 
+                WHERE status = 1 AND id_order IS NULL';
+        
+        $reservations = Db::getInstance()->executeS($sql);
+        $created_orders = 0;
+        
+        foreach ($reservations as $reservation) {
+            if ($this->createOrderFromReservation($reservation)) {
+                $created_orders++;
+            }
+        }
+        
+        if ($created_orders > 0) {
+            $this->confirmations[] = sprintf('%d commande(s) créée(s) avec succès', $created_orders);
+        } else {
+            $this->warnings[] = 'Aucune commande n\'a pu être créée';
+        }
+    }
+    
+    /**
+     * Créer une commande PrestaShop à partir d'une réservation
+     */
+    private function createOrderFromReservation($reservation)
+    {
+        try {
+            // 1. Récupérer ou créer le client
+            $customer = $this->getOrCreateCustomer($reservation);
+            if (!$customer) {
+                return false;
+            }
+            
+            // 2. Récupérer le produit associé au booker
+            $product = $this->getBookerProduct($reservation['id_booker']);
+            if (!$product) {
+                return false;
+            }
+            
+            // 3. Créer le panier
+            $cart = new Cart();
+            $cart->id_customer = $customer->id;
+            $cart->id_address_delivery = $customer->id_address;
+            $cart->id_address_invoice = $customer->id_address;
+            $cart->id_lang = $this->context->language->id;
+            $cart->id_currency = $this->context->currency->id;
+            $cart->id_carrier = 1; // Carrier par défaut pour produits virtuels
+            $cart->recyclable = 0;
+            $cart->gift = 0;
+            $cart->add();
+            
+            // 4. Ajouter le produit au panier
+            $cart->updateQty(1, $product->id);
+            
+            // 5. Créer la commande
+            $order = new Order();
+            $order->id_customer = $customer->id;
+            $order->id_cart = $cart->id;
+            $order->id_currency = $this->context->currency->id;
+            $order->id_lang = $this->context->language->id;
+            $order->id_carrier = 1;
+            $order->current_state = Configuration::get('PS_OS_BANKWIRE'); // En attente de paiement
+            $order->payment = 'Réservation';
+            $order->module = 'booking';
+            $order->total_paid = $reservation['total_price'];
+            $order->total_paid_tax_incl = $reservation['total_price'];
+            $order->total_paid_tax_excl = $reservation['total_price'];
+            $order->total_products = $reservation['total_price'];
+            $order->total_products_wt = $reservation['total_price'];
+            $order->conversion_rate = 1;
+            $order->add();
+            
+            // 6. Mettre à jour la réservation avec l'ID de commande
+            $update_sql = 'UPDATE `' . _DB_PREFIX_ . 'booker_auth_reserved` 
+                          SET id_order = ' . (int)$order->id . ', status = 2 
+                          WHERE id_reserved = ' . (int)$reservation['id_reserved'];
+            
+            Db::getInstance()->execute($update_sql);
+            
+            return true;
+            
+        } catch (Exception $e) {
+            PrestaShopLogger::addLog('Erreur création commande réservation: ' . $e->getMessage(), 3);
+            return false;
+        }
+    }
+    
+    /**
+     * Récupérer ou créer un client
+     */
+    private function getOrCreateCustomer($reservation)
+    {
+        // Rechercher un client existant par email
+        $id_customer = Customer::customerExists($reservation['customer_email'], true);
+        
+        if ($id_customer) {
+            return new Customer($id_customer);
+        }
+        
+        // Créer un nouveau client
+        $customer = new Customer();
+        $customer->firstname = $reservation['customer_firstname'];
+        $customer->lastname = $reservation['customer_lastname'];
+        $customer->email = $reservation['customer_email'];
+        $customer->passwd = Tools::encrypt(Tools::passwdGen());
+        $customer->active = 1;
+        $customer->add();
+        
+        // Créer une adresse par défaut
+        $address = new Address();
+        $address->id_customer = $customer->id;
+        $address->firstname = $customer->firstname;
+        $address->lastname = $customer->lastname;
+        $address->address1 = 'Adresse de réservation';
+        $address->city = 'Ville';
+        $address->postcode = '00000';
+        $address->id_country = Country::getByIso('FR');
+        $address->alias = 'Adresse de réservation';
+        $address->add();
+        
+        $customer->id_address = $address->id;
+        $customer->update();
+        
+        return $customer;
+    }
+    
+    /**
+     * Récupérer le produit associé à un booker
+     */
+    private function getBookerProduct($id_booker)
+    {
+        $sql = 'SELECT id_product FROM `' . _DB_PREFIX_ . 'booker` WHERE id_booker = ' . (int)$id_booker;
+        $id_product = Db::getInstance()->getValue($sql);
+        
+        if ($id_product) {
+            return new Product($id_product);
+        }
+        
+        return null;
     }
     
     /**
@@ -213,9 +360,38 @@ class AdminBookerReservationsController extends ModuleAdminController
             'pending_count' => $this->getPendingReservationsCount()
         ));
         
-        $content = $this->context->smarty->fetch($this->getTemplatePath() . 'reservation_actions.tpl');
+        $js_actions = '
+        <script>
+        $(document).ready(function() {
+            $(".quick-action").click(function(e) {
+                e.preventDefault();
+                var action = $(this).data("action");
+                var id = $(this).data("id");
+                
+                $.ajax({
+                    url: "' . $this->context->link->getAdminLink('AdminBookerReservations') . '",
+                    type: "POST",
+                    data: {
+                        ajax: 1,
+                        action: "quickAction",
+                        quick_action: action,
+                        id_reserved: id
+                    },
+                    success: function(response) {
+                        var data = JSON.parse(response);
+                        if (data.success) {
+                            showSuccessMessage(data.message);
+                            location.reload();
+                        } else {
+                            showErrorMessage(data.message);
+                        }
+                    }
+                });
+            });
+        });
+        </script>';
         
-        return $stats_html . $list . $content;
+        return $stats_html . $list . $js_actions;
     }
     
     /**
@@ -235,17 +411,6 @@ class AdminBookerReservationsController extends ModuleAdminController
         
         $current_filter = Tools::getValue('quick_filter', 'all');
         
-        foreach ($quick_filters as $key => $label) {
-            $class = ($current_filter === $key) ? 'btn-primary' : 'btn-default';
-            $url = self::$currentIndex . '&quick_filter=' . $key . '&token=' . $this->token;
-            
-            $this->page_header_toolbar_btn['filter_' . $key] = array(
-                'href' => $url,
-                'desc' => $label,
-                'class' => 'btn ' . $class . ' btn-sm'
-            );
-        }
-        
         // Appliquer le filtre à la requête
         $this->applyQuickFilter($current_filter);
     }
@@ -257,15 +422,15 @@ class AdminBookerReservationsController extends ModuleAdminController
     {
         switch ($filter) {
             case 'pending':
-                $this->_where .= ' AND a.status = ' . BookerAuthReserved::STATUS_PENDING;
+                $this->_where .= ' AND a.status = 0';
                 break;
                 
             case 'accepted':
-                $this->_where .= ' AND a.status = ' . BookerAuthReserved::STATUS_ACCEPTED;
+                $this->_where .= ' AND a.status = 1';
                 break;
                 
             case 'paid':
-                $this->_where .= ' AND a.status = ' . BookerAuthReserved::STATUS_PAID;
+                $this->_where .= ' AND a.status = 2';
                 break;
                 
             case 'today':
@@ -356,23 +521,34 @@ class AdminBookerReservationsController extends ModuleAdminController
     
     public function getStatusBadge($value, $row)
     {
-        $statuses = BookerAuthReserved::getStatuses();
+        $statuses = array(
+            0 => 'En attente',
+            1 => 'Acceptée',
+            2 => 'Payée',
+            3 => 'Annulée',
+            4 => 'Expirée',
+            5 => 'Terminée'
+        );
+        
         $status_label = isset($statuses[$row['status']]) ? $statuses[$row['status']] : 'Inconnu';
         
         $class = 'label-default';
         switch ($row['status']) {
-            case BookerAuthReserved::STATUS_PENDING:
+            case 0:
                 $class = 'label-warning';
                 break;
-            case BookerAuthReserved::STATUS_ACCEPTED:
+            case 1:
                 $class = 'label-info';
                 break;
-            case BookerAuthReserved::STATUS_PAID:
+            case 2:
                 $class = 'label-success';
                 break;
-            case BookerAuthReserved::STATUS_CANCELLED:
-            case BookerAuthReserved::STATUS_EXPIRED:
+            case 3:
+            case 4:
                 $class = 'label-danger';
+                break;
+            case 5:
+                $class = 'label-primary';
                 break;
         }
         
@@ -382,26 +558,28 @@ class AdminBookerReservationsController extends ModuleAdminController
     public function getPaymentStatusBadge($value, $row)
     {
         $payment_statuses = array(
-            BookerAuthReserved::PAYMENT_PENDING => 'En attente',
-            BookerAuthReserved::PAYMENT_PARTIAL => 'Partiel',
-            BookerAuthReserved::PAYMENT_COMPLETED => 'Complet',
-            BookerAuthReserved::PAYMENT_REFUNDED => 'Remboursé'
+            'pending' => 'En attente',
+            'authorized' => 'Autorisé',
+            'captured' => 'Capturé',
+            'cancelled' => 'Annulé',
+            'refunded' => 'Remboursé'
         );
         
         $status_label = isset($payment_statuses[$row['payment_status']]) ? $payment_statuses[$row['payment_status']] : 'Inconnu';
         
         $class = 'label-default';
         switch ($row['payment_status']) {
-            case BookerAuthReserved::PAYMENT_PENDING:
+            case 'pending':
                 $class = 'label-warning';
                 break;
-            case BookerAuthReserved::PAYMENT_PARTIAL:
+            case 'authorized':
                 $class = 'label-info';
                 break;
-            case BookerAuthReserved::PAYMENT_COMPLETED:
+            case 'captured':
                 $class = 'label-success';
                 break;
-            case BookerAuthReserved::PAYMENT_REFUNDED:
+            case 'cancelled':
+            case 'refunded':
                 $class = 'label-danger';
                 break;
         }
@@ -421,30 +599,22 @@ class AdminBookerReservationsController extends ModuleAdminController
             die(json_encode(array('success' => false, 'message' => 'ID manquant')));
         }
         
-        $reservation = new BookerAuthReserved($id_reserved);
+        $sql = 'SELECT * FROM `' . _DB_PREFIX_ . 'booker_auth_reserved` WHERE id_reserved = ' . $id_reserved;
+        $reservation = Db::getInstance()->getRow($sql);
         
-        if (!Validate::isLoadedObject($reservation)) {
+        if (!$reservation) {
             die(json_encode(array('success' => false, 'message' => 'Réservation introuvable')));
         }
         
         switch ($action) {
             case 'accept':
-                $reservation->status = BookerAuthReserved::STATUS_ACCEPTED;
-                $success = $reservation->update();
+                $success = Db::getInstance()->execute('UPDATE `' . _DB_PREFIX_ . 'booker_auth_reserved` SET status = 1 WHERE id_reserved = ' . $id_reserved);
                 $message = $success ? 'Réservation acceptée' : 'Erreur lors de l\'acceptation';
                 break;
                 
             case 'refuse':
-                $reservation->status = BookerAuthReserved::STATUS_CANCELLED;
-                $reservation->cancellation_reason = 'Refusée par l\'administrateur';
-                $success = $reservation->update();
+                $success = Db::getInstance()->execute('UPDATE `' . _DB_PREFIX_ . 'booker_auth_reserved` SET status = 3 WHERE id_reserved = ' . $id_reserved);
                 $message = $success ? 'Réservation refusée' : 'Erreur lors du refus';
-                break;
-                
-            case 'toggle_active':
-                $reservation->active = !$reservation->active;
-                $success = $reservation->update();
-                $message = $success ? 'Statut modifié' : 'Erreur lors de la modification';
                 break;
                 
             default:
@@ -454,9 +624,7 @@ class AdminBookerReservationsController extends ModuleAdminController
         
         die(json_encode(array(
             'success' => $success,
-            'message' => $message,
-            'new_status' => $reservation->status,
-            'new_active' => $reservation->active
+            'message' => $message
         )));
     }
     
@@ -475,14 +643,9 @@ class AdminBookerReservationsController extends ModuleAdminController
         $success_count = 0;
         
         foreach ($selected as $id) {
-            $reservation = new BookerAuthReserved((int)$id);
-            
-            if (Validate::isLoadedObject($reservation)) {
-                $reservation->status = BookerAuthReserved::STATUS_ACCEPTED;
-                
-                if ($reservation->update()) {
-                    $success_count++;
-                }
+            $sql = 'UPDATE `' . _DB_PREFIX_ . 'booker_auth_reserved` SET status = 1 WHERE id_reserved = ' . (int)$id;
+            if (Db::getInstance()->execute($sql)) {
+                $success_count++;
             }
         }
         
@@ -502,15 +665,9 @@ class AdminBookerReservationsController extends ModuleAdminController
         $success_count = 0;
         
         foreach ($selected as $id) {
-            $reservation = new BookerAuthReserved((int)$id);
-            
-            if (Validate::isLoadedObject($reservation)) {
-                $reservation->status = BookerAuthReserved::STATUS_CANCELLED;
-                $reservation->cancellation_reason = 'Refusée en lot par l\'administrateur';
-                
-                if ($reservation->update()) {
-                    $success_count++;
-                }
+            $sql = 'UPDATE `' . _DB_PREFIX_ . 'booker_auth_reserved` SET status = 3 WHERE id_reserved = ' . (int)$id;
+            if (Db::getInstance()->execute($sql)) {
+                $success_count++;
             }
         }
         
@@ -519,65 +676,42 @@ class AdminBookerReservationsController extends ModuleAdminController
     }
     
     /**
-     * Méthodes de statistiques
+     * Méthodes de statistiques (SUPPRESSION DES CONDITIONS active = 1)
      */
     private function getTotalReservations()
     {
-        return (int)Db::getInstance()->getValue('
-            SELECT COUNT(*) FROM `' . _DB_PREFIX_ . 'booker_auth_reserved` 
-            WHERE active = 1
-        ');
+        return (int)Db::getInstance()->getValue('SELECT COUNT(*) FROM `' . _DB_PREFIX_ . 'booker_auth_reserved`');
     }
     
     private function getPendingReservationsCount()
     {
-        return (int)Db::getInstance()->getValue('
-            SELECT COUNT(*) FROM `' . _DB_PREFIX_ . 'booker_auth_reserved` 
-            WHERE active = 1 AND status = ' . BookerAuthReserved::STATUS_PENDING
-        );
+        return (int)Db::getInstance()->getValue('SELECT COUNT(*) FROM `' . _DB_PREFIX_ . 'booker_auth_reserved` WHERE status = 0');
     }
     
     private function getAcceptedReservationsCount()
     {
-        return (int)Db::getInstance()->getValue('
-            SELECT COUNT(*) FROM `' . _DB_PREFIX_ . 'booker_auth_reserved` 
-            WHERE active = 1 AND status = ' . BookerAuthReserved::STATUS_ACCEPTED
-        );
+        return (int)Db::getInstance()->getValue('SELECT COUNT(*) FROM `' . _DB_PREFIX_ . 'booker_auth_reserved` WHERE status = 1');
     }
     
     private function getPaidReservationsCount()
     {
-        return (int)Db::getInstance()->getValue('
-            SELECT COUNT(*) FROM `' . _DB_PREFIX_ . 'booker_auth_reserved` 
-            WHERE active = 1 AND status = ' . BookerAuthReserved::STATUS_PAID
-        );
+        return (int)Db::getInstance()->getValue('SELECT COUNT(*) FROM `' . _DB_PREFIX_ . 'booker_auth_reserved` WHERE status = 2');
     }
     
     private function getTodayReservationsCount()
     {
-        return (int)Db::getInstance()->getValue('
-            SELECT COUNT(*) FROM `' . _DB_PREFIX_ . 'booker_auth_reserved` 
-            WHERE active = 1 AND DATE(date_reserved) = CURDATE()
-        ');
+        return (int)Db::getInstance()->getValue('SELECT COUNT(*) FROM `' . _DB_PREFIX_ . 'booker_auth_reserved` WHERE DATE(date_reserved) = CURDATE()');
     }
     
     private function getTodayRevenue()
     {
-        $result = Db::getInstance()->getValue('
-            SELECT SUM(total_price) FROM `' . _DB_PREFIX_ . 'booker_auth_reserved` 
-            WHERE active = 1 AND DATE(date_reserved) = CURDATE() AND status = ' . BookerAuthReserved::STATUS_PAID
-        );
-        
+        $result = Db::getInstance()->getValue('SELECT SUM(total_price) FROM `' . _DB_PREFIX_ . 'booker_auth_reserved` WHERE DATE(date_reserved) = CURDATE() AND status = 2');
         return $result ? (float)$result : 0;
     }
     
     private function getMonthRevenue()
     {
-        $result = Db::getInstance()->getValue('
-            SELECT SUM(total_price) FROM `' . _DB_PREFIX_ . 'booker_auth_reserved` 
-            WHERE active = 1 AND MONTH(date_reserved) = MONTH(CURDATE()) AND YEAR(date_reserved) = YEAR(CURDATE()) AND status = ' . BookerAuthReserved::STATUS_PAID
-        );
-        
+        $result = Db::getInstance()->getValue('SELECT SUM(total_price) FROM `' . _DB_PREFIX_ . 'booker_auth_reserved` WHERE MONTH(date_reserved) = MONTH(CURDATE()) AND YEAR(date_reserved) = YEAR(CURDATE()) AND status = 2');
         return $result ? (float)$result : 0;
     }
 }
