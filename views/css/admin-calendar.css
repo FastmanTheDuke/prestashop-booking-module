@@ -1,967 +1,688 @@
 /**
- * Styles pour les calendriers d'administration
- * Interface moderne et responsive pour FullCalendar
+ * Styles CSS pour les calendriers de réservation
+ * Design moderne et responsive pour les interfaces d'administration
  */
 
-/* ==========================================================================
-   LAYOUT GÉNÉRAL
-   ========================================================================== */
+/* =======================
+   STYLES GÉNÉRAUX CALENDRIER
+   ======================= */
 
-.calendar-container {
-    background: #f8f9fa;
-    min-height: 600px;
-    border-radius: 8px;
-    padding: 20px;
-    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-}
-
-.calendar-toolbar {
-    background: white;
-    padding: 15px 20px;
-    border-radius: 8px;
-    margin-bottom: 20px;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-    border-left: 4px solid #007bff;
-}
-
-.calendar-toolbar .btn-group {
-    margin-right: 10px;
-}
-
-.calendar-toolbar .btn {
-    margin-right: 5px;
-}
-
-.quick-actions {
-    background: #fff3cd;
-    padding: 15px 20px;
-    border-radius: 8px;
-    margin-bottom: 20px;
-    border-left: 4px solid #ffc107;
-    display: none; /* Masqué par défaut, affiché lors de sélections */
-}
-
-.quick-actions .btn-group {
-    margin-right: 10px;
-}
-
-.quick-actions .btn {
-    margin-right: 5px;
-    margin-bottom: 5px;
-}
-
-/* ==========================================================================
-   FULLCALENDAR CUSTOMIZATION
-   ========================================================================== */
-
-.fc {
+.booking-calendar-container {
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
 }
 
-.fc-header-toolbar {
-    background: white;
-    padding: 15px 20px;
+.booking-calendar-container .panel {
+    border: 1px solid #e3e6f0;
     border-radius: 8px;
-    margin-bottom: 20px;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-    flex-wrap: wrap;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 
-.fc-toolbar-title {
-    font-size: 1.5em;
-    font-weight: 600;
-    color: #2c3e50;
+.booking-calendar-container .panel-heading {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    border-radius: 8px 8px 0 0;
+    padding: 15px 20px;
+}
+
+.booking-calendar-container .panel-heading h3 {
     margin: 0;
+    font-size: 18px;
+    font-weight: 600;
 }
 
-.fc-button {
+.booking-calendar-container .panel-body {
+    padding: 20px;
+}
+
+/* =======================
+   CONTRÔLES DU CALENDRIER
+   ======================= */
+
+.calendar-controls {
     background: #f8f9fa;
-    border: 1px solid #dee2e6;
-    color: #495057;
-    font-weight: 500;
-    padding: 6px 12px;
-    transition: all 0.2s ease;
+    padding: 15px;
+    border-radius: 6px;
+    margin-bottom: 20px;
+    border: 1px solid #e9ecef;
 }
 
-.fc-button:hover {
-    background: #e9ecef;
-    border-color: #adb5bd;
+.calendar-controls .form-control {
+    border-radius: 4px;
+    border: 1px solid #ced4da;
+    transition: border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
+}
+
+.calendar-controls .form-control:focus {
+    border-color: #667eea;
+    box-shadow: 0 0 0 0.2rem rgba(102, 126, 234, 0.25);
+}
+
+.calendar-controls .btn {
+    border-radius: 4px;
+    font-weight: 500;
+    transition: all 0.15s ease-in-out;
+}
+
+.calendar-controls .btn-primary {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    border: none;
+}
+
+.calendar-controls .btn-primary:hover {
+    background: linear-gradient(135deg, #5a6fd8 0%, #6a4190 100%);
     transform: translateY(-1px);
 }
 
-.fc-button:focus {
-    box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25);
-    outline: none;
+.calendar-controls .btn-success {
+    background: linear-gradient(135deg, #56ab2f 0%, #a8e6cf 100%);
+    border: none;
 }
 
-.fc-button-primary {
-    background: #007bff;
-    border-color: #007bff;
-    color: white;
+.calendar-controls .btn-info {
+    background: linear-gradient(135deg, #3498db 0%, #2980b9 100%);
+    border: none;
 }
 
-.fc-button-primary:hover {
-    background: #0056b3;
-    border-color: #004085;
+.calendar-controls .btn-danger {
+    background: linear-gradient(135deg, #e74c3c 0%, #c0392b 100%);
+    border: none;
 }
 
-.fc-button-active {
-    background: #007bff !important;
-    border-color: #007bff !important;
-    color: white !important;
-}
+/* =======================
+   LÉGENDE DES STATUTS
+   ======================= */
 
-/* ==========================================================================
-   VUES CALENDRIER
-   ========================================================================== */
-
-.fc-theme-standard td, 
-.fc-theme-standard th {
-    border-color: #e9ecef;
-}
-
-.fc-theme-standard .fc-scrollgrid {
-    border-color: #e9ecef;
-}
-
-.fc-col-header-cell {
-    background: #f8f9fa;
-    font-weight: 600;
-    color: #495057;
-}
-
-.fc-daygrid-day {
+.legend {
     background: white;
-}
-
-.fc-daygrid-day:hover {
-    background: #f8f9fa;
-}
-
-.fc-daygrid-day.fc-day-today {
-    background: #e3f2fd !important;
-}
-
-.fc-timegrid-slot {
-    border-color: #f1f3f4;
-}
-
-.fc-timegrid-slot-minor {
-    border-color: #f8f9fa;
-}
-
-/* ==========================================================================
-   ÉVÉNEMENTS CALENDRIER
-   ========================================================================== */
-
-.fc-event {
-    cursor: pointer;
-    border: none !important;
-    font-size: 12px;
-    font-weight: 500;
+    padding: 10px;
     border-radius: 4px;
-    transition: all 0.2s ease;
-    position: relative;
-}
-
-.fc-event:hover {
-    transform: scale(1.02);
-    box-shadow: 0 2px 8px rgba(0,0,0,0.15);
-    z-index: 999;
-}
-
-.fc-event-title {
-    font-weight: 600;
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
-
-.fc-event-time {
-    font-size: 11px;
-    opacity: 0.8;
-}
-
-.fc-daygrid-event {
-    margin-bottom: 2px;
-    padding: 2px 4px;
-}
-
-.fc-timegrid-event {
-    padding: 2px 4px;
-}
-
-/* Événements sélectionnés */
-.fc-event.selected {
-    box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.5) !important;
-    z-index: 1000;
-    transform: scale(1.05);
-}
-
-/* ==========================================================================
-   COULEURS DES DISPONIBILITÉS
-   ========================================================================== */
-
-.availability-available { 
-    background-color: #28a745 !important; 
-    color: white;
-}
-
-.availability-partial { 
-    background-color: #ffc107 !important; 
-    color: #212529;
-}
-
-.availability-full { 
-    background-color: #dc3545 !important; 
-    color: white;
-}
-
-.availability-inactive { 
-    background-color: #6c757d !important; 
-    color: white;
-    opacity: 0.7;
-}
-
-/* ==========================================================================
-   COULEURS DES RÉSERVATIONS
-   ========================================================================== */
-
-.reservation-pending,
-.fc-event.reservation-pending { 
-    background-color: #ffc107 !important; 
-    color: #212529 !important;
-}
-
-.reservation-confirmed,
-.fc-event.reservation-confirmed { 
-    background-color: #17a2b8 !important; 
-    color: white !important;
-}
-
-.reservation-paid,
-.fc-event.reservation-paid { 
-    background-color: #28a745 !important; 
-    color: white !important;
-}
-
-.reservation-cancelled,
-.fc-event.reservation-cancelled { 
-    background-color: #dc3545 !important; 
-    color: white !important;
-    opacity: 0.8;
-}
-
-.reservation-completed,
-.fc-event.reservation-completed { 
-    background-color: #6f42c1 !important; 
-    color: white !important;
-}
-
-.reservation-refunded,
-.fc-event.reservation-refunded { 
-    background-color: #fd7e14 !important; 
-    color: white !important;
-}
-
-/* ==========================================================================
-   LÉGENDE ET MÉTRIQUES
-   ========================================================================== */
-
-.calendar-legend {
-    margin-top: 20px;
-    padding: 15px;
-    background: #f8f9fa;
-    border-radius: 8px;
-    border-left: 4px solid #6c757d;
-}
-
-.legend-items {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 20px;
+    border: 1px solid #e9ecef;
 }
 
 .legend-item {
+    display: inline-block;
+    padding: 4px 8px;
+    margin-right: 8px;
+    margin-bottom: 4px;
+    border-radius: 3px;
+    color: white;
+    font-size: 12px;
+    font-weight: 500;
+}
+
+/* =======================
+   STYLES FULLCALENDAR
+   ======================= */
+
+#calendar {
+    background: white;
+    border-radius: 6px;
+    padding: 10px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.fc-header-toolbar {
+    margin-bottom: 20px !important;
+}
+
+.fc-toolbar-title {
+    font-size: 24px !important;
+    font-weight: 600 !important;
+    color: #2c3e50;
+}
+
+.fc-button {
+    border-radius: 4px !important;
+    border: 1px solid #ced4da !important;
+    background: white !important;
+    color: #495057 !important;
+    font-weight: 500 !important;
+    transition: all 0.15s ease-in-out !important;
+}
+
+.fc-button:hover {
+    background: #f8f9fa !important;
+    border-color: #adb5bd !important;
+    transform: translateY(-1px);
+}
+
+.fc-button-primary {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
+    border-color: #667eea !important;
+    color: white !important;
+}
+
+.fc-button-primary:hover {
+    background: linear-gradient(135deg, #5a6fd8 0%, #6a4190 100%) !important;
+}
+
+.fc-button-active {
+    background: #667eea !important;
+    border-color: #667eea !important;
+    color: white !important;
+}
+
+/* =======================
+   ÉVÉNEMENTS CALENDRIER
+   ======================= */
+
+.fc-event {
+    border-radius: 4px !important;
+    border: none !important;
+    padding: 2px 6px !important;
+    font-size: 12px !important;
+    font-weight: 500 !important;
+    cursor: pointer !important;
+    transition: all 0.15s ease-in-out !important;
+    position: relative !important;
+}
+
+.fc-event:hover {
+    transform: translateY(-1px) !important;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15) !important;
+}
+
+.fc-event-title {
+    font-weight: 500 !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    white-space: nowrap !important;
+}
+
+/* =======================
+   INDICATEURS SUR ÉVÉNEMENTS
+   ======================= */
+
+.capacity-indicator {
+    position: absolute;
+    top: -5px;
+    right: -5px;
+    background: #dc3545;
+    color: white;
+    border-radius: 50%;
+    width: 18px;
+    height: 18px;
+    font-size: 10px;
     display: flex;
     align-items: center;
-    gap: 8px;
-    font-size: 14px;
+    justify-content: center;
+    font-weight: 600;
+    z-index: 10;
 }
 
-.legend-color {
+.price-indicator {
+    position: absolute;
+    bottom: -5px;
+    right: -5px;
+    background: #28a745;
+    color: white;
+    border-radius: 3px;
+    padding: 1px 4px;
+    font-size: 9px;
+    font-weight: 600;
+    z-index: 10;
+}
+
+.deposit-indicator {
+    position: absolute;
+    top: -5px;
+    left: -5px;
+    background: #ffc107;
+    border-radius: 50%;
     width: 16px;
     height: 16px;
-    border-radius: 3px;
-    display: inline-block;
-    border: 1px solid rgba(0,0,0,0.1);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    z-index: 10;
 }
 
-.metric-number {
-    font-weight: bold;
-    margin-bottom: 5px;
-    font-size: 2em;
+/* =======================
+   TYPES D'ÉVÉNEMENTS
+   ======================= */
+
+/* Disponibilités */
+.fc-event.availability-event {
+    background: linear-gradient(135deg, #28a745 0%, #20c997 100%) !important;
+    border-left: 4px solid #155724 !important;
 }
 
-.metric-label {
-    font-size: 0.9em;
-    color: #666;
+.fc-event.availability-event.partial {
+    background: linear-gradient(135deg, #ffc107 0%, #fd7e14 100%) !important;
+    border-left: 4px solid #856404 !important;
 }
 
-/* Couleurs des métriques de réservation */
-.reservation-pending-color { color: #ffc107; }
-.reservation-confirmed-color { color: #17a2b8; }
-.reservation-paid-color { color: #28a745; }
-.reservation-cancelled-color { color: #dc3545; }
-.reservation-completed-color { color: #6f42c1; }
+.fc-event.availability-event.full {
+    background: linear-gradient(135deg, #dc3545 0%, #c82333 100%) !important;
+    border-left: 4px solid #721c24 !important;
+}
 
-/* ==========================================================================
+.fc-event.recurring-event {
+    border: 2px dashed #007bff !important;
+    background: linear-gradient(135deg, rgba(0, 123, 255, 0.1) 0%, rgba(0, 123, 255, 0.3) 100%) !important;
+}
+
+/* Réservations par statut */
+.fc-event.status-0 {
+    background: linear-gradient(135deg, #ffc107 0%, #fd7e14 100%) !important; /* En attente */
+}
+
+.fc-event.status-1 {
+    background: linear-gradient(135deg, #28a745 0%, #20c997 100%) !important; /* Acceptée */
+}
+
+.fc-event.status-2 {
+    background: linear-gradient(135deg, #17a2b8 0%, #138496 100%) !important; /* En attente de paiement */
+}
+
+.fc-event.status-3 {
+    background: linear-gradient(135deg, #007bff 0%, #0056b3 100%) !important; /* Payée */
+}
+
+.fc-event.status-4 {
+    background: linear-gradient(135deg, #dc3545 0%, #c82333 100%) !important; /* Annulée */
+}
+
+.fc-event.status-5 {
+    background: linear-gradient(135deg, #6c757d 0%, #545b62 100%) !important; /* Expirée */
+}
+
+.fc-event.status-6 {
+    background: linear-gradient(135deg, #343a40 0%, #23272b 100%) !important; /* Terminée */
+}
+
+.fc-event.status-7 {
+    background: linear-gradient(135deg, #fd7e14 0%, #e8590c 100%) !important; /* Remboursée */
+}
+
+/* =======================
+   SÉLECTION MULTIPLE
+   ======================= */
+
+.multi-select-mode .fc-event {
+    cursor: copy !important;
+}
+
+.multi-select-mode .fc-event:hover {
+    box-shadow: 0 0 0 2px #007bff !important;
+}
+
+.fc-event.selected {
+    box-shadow: 0 0 0 3px #007bff !important;
+    z-index: 100 !important;
+}
+
+/* =======================
    MODALES
-   ========================================================================== */
+   ======================= */
 
-.modal-content {
-    border-radius: 8px;
-    box-shadow: 0 5px 20px rgba(0,0,0,0.15);
+.modal-lg {
+    max-width: 900px;
 }
 
 .modal-header {
-    background: #f8f9fa;
-    border-bottom: 1px solid #dee2e6;
-    border-radius: 8px 8px 0 0;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    border-radius: 6px 6px 0 0;
 }
 
 .modal-title {
     font-weight: 600;
-    color: #2c3e50;
 }
 
 .modal-body {
-    padding: 20px;
+    padding: 25px;
+}
+
+.modal-body h5 {
+    color: #2c3e50;
+    font-weight: 600;
+    margin-top: 20px;
+    margin-bottom: 15px;
+    padding-bottom: 8px;
+    border-bottom: 2px solid #e9ecef;
+}
+
+.modal-body .form-group label {
+    font-weight: 500;
+    color: #495057;
+    margin-bottom: 5px;
+}
+
+.modal-body .form-control {
+    border-radius: 4px;
+    border: 1px solid #ced4da;
+    transition: border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
+}
+
+.modal-body .form-control:focus {
+    border-color: #667eea;
+    box-shadow: 0 0 0 0.2rem rgba(102, 126, 234, 0.25);
 }
 
 .modal-footer {
     background: #f8f9fa;
-    border-top: 1px solid #dee2e6;
-    border-radius: 0 0 8px 8px;
+    border-radius: 0 0 6px 6px;
 }
 
-/* Formulaires dans les modales */
-.modal .form-group {
-    margin-bottom: 15px;
+/* =======================
+   DÉTAILS DE RÉSERVATION
+   ======================= */
+
+.reservation-details .table td {
+    padding: 8px 12px;
+    border: none;
+    vertical-align: middle;
 }
 
-.modal .form-control {
-    border-radius: 4px;
-    border: 1px solid #ced4da;
-    transition: border-color 0.2s ease;
-}
-
-.modal .form-control:focus {
-    border-color: #007bff;
-    box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25);
-}
-
-.modal .btn {
-    margin-right: 5px;
-    padding: 8px 16px;
-    border-radius: 4px;
+.reservation-details .table td:first-child {
+    width: 140px;
     font-weight: 500;
-    transition: all 0.2s ease;
+    color: #495057;
 }
 
-.modal .btn:hover {
-    transform: translateY(-1px);
-}
-
-/* ==========================================================================
-   MENU CONTEXTUEL
-   ========================================================================== */
-
-.context-menu {
-    background: white;
-    border: 1px solid #ccc;
+.reservation-details .well {
+    background: #f8f9fa;
+    border: 1px solid #e9ecef;
     border-radius: 4px;
-    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-    min-width: 150px;
-    z-index: 9999;
+    padding: 10px;
+    margin: 0;
+    min-height: 60px;
 }
 
-.context-menu div {
-    padding: 8px 16px;
-    cursor: pointer;
-    transition: background-color 0.2s ease;
-    font-size: 14px;
+/* =======================
+   OPTIONS RÉCURRENCE
+   ======================= */
+
+.recurring-options {
+    background: #f8f9fa;
+    border: 1px solid #e9ecef;
+    border-radius: 4px;
+    padding: 15px;
+    margin-top: 10px;
 }
 
-.context-menu div:hover {
-    background-color: #f5f5f5;
+.recurring-options h6 {
+    color: #495057;
+    font-weight: 600;
+    margin-bottom: 10px;
 }
 
-.context-menu div:first-child {
-    border-radius: 4px 4px 0 0;
-}
-
-.context-menu div:last-child {
-    border-radius: 0 0 4px 4px;
-}
-
-/* ==========================================================================
-   NOTIFICATIONS
-   ========================================================================== */
+/* =======================
+   ALERTES ET MESSAGES
+   ======================= */
 
 .alert {
     border-radius: 6px;
-    padding: 12px 16px;
-    margin-bottom: 15px;
     border: none;
+    padding: 15px 20px;
+    margin-bottom: 20px;
     font-weight: 500;
-    position: relative;
 }
 
 .alert-success {
-    background-color: #d4edda;
+    background: linear-gradient(135deg, #d4edda 0%, #c3e6cb 100%);
     color: #155724;
     border-left: 4px solid #28a745;
 }
 
 .alert-danger {
-    background-color: #f8d7da;
+    background: linear-gradient(135deg, #f8d7da 0%, #f5c6cb 100%);
     color: #721c24;
     border-left: 4px solid #dc3545;
 }
 
 .alert-warning {
-    background-color: #fff3cd;
+    background: linear-gradient(135deg, #fff3cd 0%, #ffeaa7 100%);
     color: #856404;
     border-left: 4px solid #ffc107;
 }
 
 .alert-info {
-    background-color: #d1ecf1;
+    background: linear-gradient(135deg, #d1ecf1 0%, #bee5eb 100%);
     color: #0c5460;
     border-left: 4px solid #17a2b8;
 }
 
-.alert .close {
-    position: absolute;
-    top: 8px;
-    right: 12px;
-    background: none;
-    border: none;
-    font-size: 18px;
-    line-height: 1;
-    cursor: pointer;
-    opacity: 0.5;
-    transition: opacity 0.2s ease;
-}
+/* =======================
+   STATISTIQUES
+   ======================= */
 
-.alert .close:hover {
-    opacity: 1;
-}
-
-/* ==========================================================================
-   PANNEAUX DE CONTRÔLE
-   ========================================================================== */
-
-.panel {
+.stats-container {
     background: white;
     border-radius: 8px;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-    margin-bottom: 20px;
-    border: none;
-}
-
-.panel-heading {
-    background: #f8f9fa;
-    border-bottom: 1px solid #dee2e6;
-    border-radius: 8px 8px 0 0;
-    padding: 15px 20px;
-    position: relative;
-}
-
-.panel-heading-action {
-    position: absolute;
-    right: 20px;
-    top: 50%;
-    transform: translateY(-50%);
-}
-
-.panel-title {
-    font-weight: 600;
-    color: #2c3e50;
-    margin: 0;
-    font-size: 16px;
-}
-
-.panel-body {
     padding: 20px;
+    margin-bottom: 20px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 
-/* ==========================================================================
-   FORMULAIRES
-   ========================================================================== */
-
-.form-group {
+.stat-card {
+    text-align: center;
+    padding: 20px;
+    border-radius: 6px;
+    color: white;
     margin-bottom: 15px;
+    transition: transform 0.15s ease-in-out;
 }
 
-.form-control {
-    border-radius: 4px;
-    border: 1px solid #ced4da;
-    padding: 8px 12px;
-    font-size: 14px;
-    transition: all 0.2s ease;
+.stat-card:hover {
+    transform: translateY(-2px);
 }
 
-.form-control:focus {
-    border-color: #007bff;
-    box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25);
-    outline: none;
+.stat-card h3 {
+    font-size: 36px;
+    font-weight: 700;
+    margin: 0;
 }
 
-.form-control:disabled {
-    background-color: #f8f9fa;
-    opacity: 0.6;
-}
-
-label {
+.stat-card p {
+    margin: 5px 0 0 0;
     font-weight: 500;
-    color: #495057;
-    margin-bottom: 5px;
-    display: block;
+    opacity: 0.9;
 }
 
-label.required::after {
-    content: ' *';
-    color: #dc3545;
+.stat-card.pending {
+    background: linear-gradient(135deg, #ffc107 0%, #fd7e14 100%);
 }
 
-.help-block {
-    font-size: 12px;
-    color: #6c757d;
-    margin-top: 5px;
+.stat-card.confirmed {
+    background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
 }
 
-.checkbox-group {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 15px;
+.stat-card.cancelled {
+    background: linear-gradient(135deg, #dc3545 0%, #c82333 100%);
 }
 
-.checkbox-inline {
-    display: flex;
-    align-items: center;
-    gap: 5px;
-    font-weight: 400;
+.stat-card.total {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
 }
 
-/* ==========================================================================
-   BOUTONS
-   ========================================================================== */
-
-.btn {
-    border-radius: 4px;
-    font-weight: 500;
-    padding: 8px 16px;
-    border: 1px solid transparent;
-    transition: all 0.2s ease;
-    text-decoration: none;
-    display: inline-block;
-    cursor: pointer;
-    line-height: 1.5;
-}
-
-.btn:hover {
-    transform: translateY(-1px);
-    text-decoration: none;
-}
-
-.btn:focus {
-    box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25);
-    outline: none;
-}
-
-.btn-primary {
-    background-color: #007bff;
-    border-color: #007bff;
-    color: white;
-}
-
-.btn-primary:hover {
-    background-color: #0056b3;
-    border-color: #004085;
-    color: white;
-}
-
-.btn-success {
-    background-color: #28a745;
-    border-color: #28a745;
-    color: white;
-}
-
-.btn-success:hover {
-    background-color: #1e7e34;
-    border-color: #1c7430;
-    color: white;
-}
-
-.btn-warning {
-    background-color: #ffc107;
-    border-color: #ffc107;
-    color: #212529;
-}
-
-.btn-warning:hover {
-    background-color: #e0a800;
-    border-color: #d39e00;
-    color: #212529;
-}
-
-.btn-danger {
-    background-color: #dc3545;
-    border-color: #dc3545;
-    color: white;
-}
-
-.btn-danger:hover {
-    background-color: #c82333;
-    border-color: #bd2130;
-    color: white;
-}
-
-.btn-info {
-    background-color: #17a2b8;
-    border-color: #17a2b8;
-    color: white;
-}
-
-.btn-info:hover {
-    background-color: #138496;
-    border-color: #117a8b;
-    color: white;
-}
-
-.btn-default {
-    background-color: #f8f9fa;
-    border-color: #dee2e6;
-    color: #495057;
-}
-
-.btn-default:hover {
-    background-color: #e9ecef;
-    border-color: #adb5bd;
-    color: #495057;
-}
-
-.btn-group .btn {
-    margin-right: 0;
-}
-
-.btn-group .btn:not(:last-child) {
-    border-right: none;
-}
-
-.btn-group .btn:first-child {
-    border-radius: 4px 0 0 4px;
-}
-
-.btn-group .btn:last-child {
-    border-radius: 0 4px 4px 0;
-}
-
-.btn-group .btn:only-child {
-    border-radius: 4px;
-}
-
-/* ==========================================================================
-   TABLEAUX
-   ========================================================================== */
-
-.table {
-    width: 100%;
-    border-collapse: collapse;
-    background: white;
-}
-
-.table th,
-.table td {
-    padding: 12px 15px;
-    text-align: left;
-    border-bottom: 1px solid #dee2e6;
-}
-
-.table th {
-    background: #f8f9fa;
-    font-weight: 600;
-    color: #495057;
-}
-
-.table-bordered {
-    border: 1px solid #dee2e6;
-}
-
-.table-bordered th,
-.table-bordered td {
-    border: 1px solid #dee2e6;
-}
-
-.calendar-table {
-    font-size: 14px;
-}
-
-.calendar-table th {
-    text-align: center;
-    background: #007bff;
-    color: white;
-    padding: 10px 5px;
-}
-
-.calendar-table td {
-    text-align: center;
-    vertical-align: top;
-    height: 80px;
-    position: relative;
-    cursor: pointer;
-    transition: background-color 0.2s ease;
-}
-
-.calendar-table td:hover {
-    background-color: #f8f9fa;
-}
-
-/* ==========================================================================
-   BADGES ET STATUTS
-   ========================================================================== */
-
-.badge {
-    display: inline-block;
-    padding: 4px 8px;
-    font-size: 11px;
-    font-weight: 500;
-    line-height: 1;
-    text-align: center;
-    white-space: nowrap;
-    vertical-align: baseline;
-    border-radius: 3px;
-}
-
-.badge-success { background-color: #28a745; color: white; }
-.badge-danger { background-color: #dc3545; color: white; }
-.badge-warning { background-color: #ffc107; color: #212529; }
-.badge-info { background-color: #17a2b8; color: white; }
-.badge-secondary { background-color: #6c757d; color: white; }
-
-/* ==========================================================================
+/* =======================
    RESPONSIVE
-   ========================================================================== */
+   ======================= */
 
 @media (max-width: 768px) {
-    .calendar-container {
-        padding: 10px;
-        margin: 0 -15px;
-        border-radius: 0;
-    }
-    
-    .calendar-toolbar {
-        padding: 10px;
+    .calendar-controls .row {
         margin-bottom: 10px;
     }
     
-    .calendar-toolbar .row {
-        margin: 0;
-    }
-    
-    .calendar-toolbar .col-md-3,
-    .calendar-toolbar .col-md-4 {
-        margin-bottom: 10px;
-        padding: 0 5px;
-    }
-    
-    .quick-actions {
-        padding: 10px;
+    .calendar-controls .col-md-4,
+    .calendar-controls .col-md-6,
+    .calendar-controls .col-md-8 {
         margin-bottom: 10px;
     }
     
-    .quick-actions .btn-group {
-        display: flex;
-        flex-direction: column;
+    .fc-toolbar {
+        flex-direction: column !important;
+    }
+    
+    .fc-toolbar-chunk {
+        margin-bottom: 10px !important;
+    }
+    
+    .fc-button-group {
         width: 100%;
     }
     
-    .quick-actions .btn {
-        margin-bottom: 5px;
-        margin-right: 0;
-    }
-    
-    .legend-items {
-        flex-direction: column;
-        gap: 10px;
-    }
-    
-    .fc-header-toolbar {
-        padding: 10px;
-        margin-bottom: 10px;
-    }
-    
-    .fc-toolbar-title {
-        font-size: 1.2em;
-    }
-    
     .fc-button {
-        padding: 4px 8px;
-        font-size: 12px;
+        flex: 1;
     }
     
-    .modal-dialog {
-        margin: 10px;
+    .modal-lg {
+        max-width: 95%;
     }
     
-    .modal-body {
-        padding: 15px;
+    .stat-card {
+        margin-bottom: 15px;
     }
     
-    .btn {
-        font-size: 12px;
-        padding: 6px 12px;
-    }
-    
-    .metric-number {
-        font-size: 1.5em;
+    .stat-card h3 {
+        font-size: 28px;
     }
 }
 
 @media (max-width: 480px) {
+    .booking-calendar-container .panel-body {
+        padding: 15px;
+    }
+    
+    .calendar-controls {
+        padding: 10px;
+    }
+    
     .fc-event {
-        font-size: 10px;
-        padding: 1px 2px;
+        font-size: 10px !important;
     }
     
-    .fc-event-title {
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-    }
-    
-    .calendar-table td {
-        height: 60px;
-        font-size: 12px;
-    }
-    
-    .btn-group .btn {
-        font-size: 10px;
-        padding: 4px 8px;
-    }
-    
-    .form-control {
-        font-size: 14px;
-        padding: 6px 10px;
+    .capacity-indicator,
+    .price-indicator {
+        font-size: 8px;
+        width: 14px;
+        height: 14px;
     }
 }
 
-/* ==========================================================================
-   LOADING ET ÉTATS
-   ========================================================================== */
-
-#calendar-loading {
-    text-align: center;
-    padding: 50px;
-    color: #6c757d;
-}
-
-#calendar-loading i {
-    color: #007bff;
-    margin-bottom: 10px;
-}
-
-.loading-spinner {
-    border: 3px solid #f3f3f3;
-    border-top: 3px solid #007bff;
-    border-radius: 50%;
-    width: 30px;
-    height: 30px;
-    animation: spin 1s linear infinite;
-    margin: 0 auto;
-}
-
-@keyframes spin {
-    0% { transform: rotate(0deg); }
-    100% { transform: rotate(360deg); }
-}
-
-.empty-state {
-    text-align: center;
-    padding: 40px 20px;
-    color: #6c757d;
-}
-
-.empty-state h3 {
-    color: #495057;
-    margin-bottom: 10px;
-}
-
-.empty-state p {
-    margin-bottom: 20px;
-}
-
-/* ==========================================================================
+/* =======================
    ANIMATIONS
-   ========================================================================== */
+   ======================= */
+
+@keyframes slideInUp {
+    from {
+        transform: translateY(20px);
+        opacity: 0;
+    }
+    to {
+        transform: translateY(0);
+        opacity: 1;
+    }
+}
 
 @keyframes fadeIn {
-    from { opacity: 0; transform: translateY(10px); }
-    to { opacity: 1; transform: translateY(0); }
-}
-
-@keyframes slideInRight {
-    from { transform: translateX(20px); opacity: 0; }
-    to { transform: translateX(0); opacity: 1; }
-}
-
-.fade-in {
-    animation: fadeIn 0.3s ease-out;
-}
-
-.slide-in-right {
-    animation: slideInRight 0.3s ease-out;
-}
-
-/* Transition pour les événements */
-.fc-event {
-    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.fc-event:hover {
-    transition: all 0.1s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-/* ==========================================================================
-   DARK MODE (optionnel)
-   ========================================================================== */
-
-@media (prefers-color-scheme: dark) {
-    /* À implémenter si nécessaire */
-}
-
-/* ==========================================================================
-   PRINT STYLES
-   ========================================================================== */
-
-@media print {
-    .calendar-toolbar,
-    .quick-actions,
-    .panel-heading-action,
-    .modal,
-    .context-menu {
-        display: none !important;
+    from {
+        opacity: 0;
     }
-    
-    .calendar-container {
-        box-shadow: none;
-        background: white;
+    to {
+        opacity: 1;
     }
-    
-    .fc-event {
-        color: black !important;
-        background: white !important;
-        border: 1px solid black !important;
-    }
+}
+
+.booking-calendar-container {
+    animation: fadeIn 0.3s ease-in-out;
+}
+
+.modal-content {
+    animation: slideInUp 0.3s ease-out;
+}
+
+.alert {
+    animation: slideInUp 0.3s ease-out;
+}
+
+/* =======================
+   TOOLTIPS
+   ======================= */
+
+.tooltip {
+    font-size: 12px;
+}
+
+.tooltip-inner {
+    background: #2c3e50;
+    border-radius: 4px;
+    padding: 8px 12px;
+    max-width: 300px;
+    text-align: left;
+}
+
+.tooltip.top .tooltip-arrow {
+    border-top-color: #2c3e50;
+}
+
+.tooltip.bottom .tooltip-arrow {
+    border-bottom-color: #2c3e50;
+}
+
+.tooltip.left .tooltip-arrow {
+    border-left-color: #2c3e50;
+}
+
+.tooltip.right .tooltip-arrow {
+    border-right-color: #2c3e50;
+}
+
+/* =======================
+   UTILITAIRES
+   ======================= */
+
+.text-muted {
+    color: #6c757d !important;
+}
+
+.text-primary {
+    color: #667eea !important;
+}
+
+.text-success {
+    color: #28a745 !important;
+}
+
+.text-danger {
+    color: #dc3545 !important;
+}
+
+.text-warning {
+    color: #ffc107 !important;
+}
+
+.text-info {
+    color: #17a2b8 !important;
+}
+
+.mb-3 {
+    margin-bottom: 1rem !important;
+}
+
+.mt-2 {
+    margin-top: 0.5rem !important;
+}
+
+.p-3 {
+    padding: 1rem !important;
+}
+
+.border-radius-4 {
+    border-radius: 4px;
+}
+
+.shadow-sm {
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.shadow {
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.shadow-lg {
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
 }
