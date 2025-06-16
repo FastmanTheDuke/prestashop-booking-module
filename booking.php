@@ -2,12 +2,12 @@
 if (!defined('_PS_VERSION_')) {
     exit;
 }
-error_reporting(E_ALL & ~E_NOTICE);
-ini_set('error_reporting', E_ALL & ~E_NOTICE);
 
 require_once (dirname(__FILE__). '/classes/Booker.php');
 require_once (dirname(__FILE__). '/classes/BookerAuth.php');
 require_once (dirname(__FILE__). '/classes/BookerAuthReserved.php');
+require_once (dirname(__FILE__). '/classes/StripeDepositManager.php');
+require_once (dirname(__FILE__). '/classes/BookingNotificationSystem.php');
 
 class Booking extends Module  {
     protected $token = "";
@@ -17,22 +17,22 @@ class Booking extends Module  {
     {
         $this->name = 'booking';
         $this->tab = 'others';
-        $this->version = '2.1.2';
-        $this->author = 'BBb';
+        $this->version = '2.1.4';
+        $this->author = 'FastmanTheDuke';
         $this->bootstrap = true;
         $this->need_instance = 0;
         
         parent::__construct();
 
-        $this->displayName = $this->l('Système de Réservations Avancé v2.1.2');
-        $this->description = $this->l('Module complet de gestion de réservations avec calendriers interactifs doubles, statuts avancés, intégration produits et paiement Stripe avec caution');
-        $this->confirmUninstall = $this->l('Êtes-vous sûr de vouloir désinstaller ce module ? Toutes les données de réservation seront perdues.');
+        $this->displayName = $this->l('Système de Réservations Avancé v2.1.4');
+        $this->description = $this->l('Module complet de gestion de réservations avec cautions Stripe, empreinte CB, calendriers interactifs, statuts avancés et intégration e-commerce complète');
+        $this->confirmUninstall = $this->l('Êtes-vous sûr de vouloir désinstaller ce module ? Toutes les données de réservation et de caution seront perdues définitivement.');
 
-        $this->ps_versions_compliancy = array('min' => '1.7', 'max' => _PS_VERSION_);
+        $this->ps_versions_compliancy = array('min' => '1.7.6', 'max' => _PS_VERSION_);
     }
 
     /**
-     * Installation du module
+     * Installation du module - VERSION 2.1.4
      */
     public function install()
     {
@@ -40,7 +40,9 @@ class Booking extends Module  {
                $this->installDB() && 
                $this->installTab() && 
                $this->installConfiguration() &&
-               $this->registerHooks();
+               $this->registerHooks() &&
+               $this->installOrderStates() &&
+               $this->createDirectories();
     }
 
     /**
@@ -55,7 +57,7 @@ class Booking extends Module  {
     }
 
     /**
-     * Enregistrement des hooks
+     * Enregistrement des hooks - VERSION ÉTENDUE v2.1.4
      */
     private function registerHooks()
     {
@@ -68,17 +70,25 @@ class Booking extends Module  {
                $this->registerHook('actionOrderStatusPostUpdate') &&
                $this->registerHook('actionPaymentConfirmation') &&
                $this->registerHook('displayAdminProductsExtra') &&
-               $this->registerHook('actionProductSave');
+               $this->registerHook('actionProductSave') &&
+               // Nouveaux hooks v2.1.4
+               $this->registerHook('actionValidateOrder') &&
+               $this->registerHook('actionOrderHistoryAddAfter') &&
+               $this->registerHook('displayShoppingCart') &&
+               $this->registerHook('actionCartSave') &&
+               $this->registerHook('displayProductButtons') &&
+               $this->registerHook('displayCustomerAccount') &&
+               $this->registerHook('displayMyAccountBlock');
     }
 
     /**
-     * Installation de la base de données - VERSION CORRIGÉE AVEC SCHÉMA COHÉRENT
+     * Installation de la base de données - VERSION 2.1.4 COMPLÈTE
      */
     private function installDB()
     {
         $sql = array();
 
-        // Table des éléments réservables (bookers) - SCHÉMA COMPLET ET COHÉRENT
+        // Tables existantes mises à jour...
         $sql[] = 'CREATE TABLE IF NOT EXISTS `' . _DB_PREFIX_ . 'booker` (
             `id_booker` int(11) NOT NULL AUTO_INCREMENT,
             `id_product` int(11) DEFAULT NULL,
@@ -90,23 +100,26 @@ class Booking extends Module  {
             `booking_duration` int(11) DEFAULT 60,
             `min_booking_time` int(11) DEFAULT 24,
             `max_booking_days` int(11) DEFAULT 30,
-            `deposit_required` tinyint(1) DEFAULT 0,
+            `deposit_required` tinyint(1) DEFAULT 1,
+            `deposit_rate` decimal(5,2) DEFAULT 30.00,
             `deposit_amount` decimal(10,2) DEFAULT 0.00,
             `auto_confirm` tinyint(1) DEFAULT 0,
             `cancellation_hours` int(11) DEFAULT 24,
             `image` varchar(255) DEFAULT NULL,
             `sort_order` int(11) DEFAULT 0,
             `google_account` varchar(255) DEFAULT NULL,
+            `stripe_product_id` varchar(255) DEFAULT NULL,
+            `stripe_price_id` varchar(255) DEFAULT NULL,
             `active` tinyint(1) DEFAULT 1,
             `date_add` datetime NOT NULL,
             `date_upd` datetime NOT NULL,
             PRIMARY KEY (`id_booker`),
             KEY `idx_product` (`id_product`),
             KEY `idx_active` (`active`),
-            KEY `idx_sort_order` (`sort_order`)
+            KEY `idx_sort_order` (`sort_order`),
+            KEY `idx_stripe_product` (`stripe_product_id`)
         ) ENGINE=' . _MYSQL_ENGINE_ . ' DEFAULT CHARSET=utf8';
 
-        // Table des disponibilités - SCHÉMA COMPLET ET COHÉRENT
         $sql[] = 'CREATE TABLE IF NOT EXISTS `' . _DB_PREFIX_ . 'booker_auth` (
             `id_auth` int(11) NOT NULL AUTO_INCREMENT,
             `id_booker` int(11) NOT NULL,
@@ -117,6 +130,7 @@ class Booking extends Module  {
             `max_bookings` int(11) DEFAULT 1,
             `current_bookings` int(11) DEFAULT 0,
             `price_override` decimal(10,2) DEFAULT NULL,
+            `deposit_override` decimal(10,2) DEFAULT NULL,
             `active` tinyint(1) DEFAULT 1,
             `recurring` tinyint(1) DEFAULT 0,
             `recurring_type` enum(\'daily\',\'weekly\',\'monthly\') DEFAULT NULL,
@@ -132,7 +146,6 @@ class Booking extends Module  {
             KEY `idx_recurring_type` (`recurring_type`)
         ) ENGINE=' . _MYSQL_ENGINE_ . ' DEFAULT CHARSET=utf8';
 
-        // Table des réservations - SCHÉMA COMPLET ET COHÉRENT
         $sql[] = 'CREATE TABLE IF NOT EXISTS `' . _DB_PREFIX_ . 'booker_auth_reserved` (
             `id_reserved` int(11) NOT NULL AUTO_INCREMENT,
             `id_auth` int(11) NOT NULL,
@@ -154,6 +167,11 @@ class Booking extends Module  {
             `payment_status` enum(\'pending\',\'authorized\',\'captured\',\'cancelled\',\'refunded\') DEFAULT \'pending\',
             `stripe_payment_intent_id` varchar(255) DEFAULT NULL,
             `stripe_deposit_intent_id` varchar(255) DEFAULT NULL,
+            `deposit_required` tinyint(1) NOT NULL DEFAULT 1,
+            `deposit_rate` decimal(5,2) DEFAULT NULL,
+            `deposit_status` varchar(20) DEFAULT \'none\',
+            `card_fingerprint` varchar(255) DEFAULT NULL,
+            `auto_capture_date` datetime DEFAULT NULL,
             `notes` text,
             `admin_notes` text,
             `date_expiry` datetime DEFAULT NULL,
@@ -167,21 +185,119 @@ class Booking extends Module  {
             KEY `idx_order` (`id_order`),
             KEY `idx_status` (`status`),
             KEY `idx_payment_status` (`payment_status`),
-            KEY `idx_date_range` (`date_reserved`, `date_to`)
+            KEY `idx_date_range` (`date_reserved`, `date_to`),
+            KEY `idx_deposit_status` (`deposit_status`),
+            KEY `idx_auto_capture` (`auto_capture_date`)
         ) ENGINE=' . _MYSQL_ENGINE_ . ' DEFAULT CHARSET=utf8';
 
-        // Table de liaison produits PrestaShop
+        // Nouvelles tables v2.1.4 pour les cautions
+        $sql[] = 'CREATE TABLE IF NOT EXISTS `' . _DB_PREFIX_ . 'booking_customers` (
+            `id_booking_customer` int(11) NOT NULL AUTO_INCREMENT,
+            `id_customer` int(11) NOT NULL DEFAULT 0,
+            `stripe_customer_id` varchar(255) NOT NULL,
+            `date_add` datetime NOT NULL,
+            `date_upd` datetime NOT NULL,
+            PRIMARY KEY (`id_booking_customer`),
+            UNIQUE KEY `idx_customer` (`id_customer`),
+            UNIQUE KEY `idx_stripe_customer` (`stripe_customer_id`),
+            KEY `idx_date_add` (`date_add`)
+        ) ENGINE=' . _MYSQL_ENGINE_ . ' DEFAULT CHARSET=utf8';
+
+        $sql[] = 'CREATE TABLE IF NOT EXISTS `' . _DB_PREFIX_ . 'booking_deposits` (
+            `id_deposit` int(11) NOT NULL AUTO_INCREMENT,
+            `id_reservation` int(11) NOT NULL,
+            `setup_intent_id` varchar(255) DEFAULT NULL,
+            `payment_method_id` varchar(255) DEFAULT NULL,
+            `payment_intent_id` varchar(255) DEFAULT NULL,
+            `stripe_transaction_id` varchar(255) DEFAULT NULL,
+            `deposit_amount` int(11) NOT NULL DEFAULT 0 COMMENT \'Montant en centimes\',
+            `captured_amount` int(11) NOT NULL DEFAULT 0 COMMENT \'Montant capturé en centimes\',
+            `refunded_amount` int(11) NOT NULL DEFAULT 0 COMMENT \'Montant remboursé en centimes\',
+            `status` varchar(20) NOT NULL DEFAULT \'pending\',
+            `failure_reason` text DEFAULT NULL,
+            `metadata` text DEFAULT NULL COMMENT \'JSON avec métadonnées Stripe\',
+            `date_authorized` datetime DEFAULT NULL,
+            `date_captured` datetime DEFAULT NULL,
+            `date_released` datetime DEFAULT NULL,
+            `date_refunded` datetime DEFAULT NULL,
+            `date_add` datetime NOT NULL,
+            `date_upd` datetime NOT NULL,
+            PRIMARY KEY (`id_deposit`),
+            UNIQUE KEY `idx_reservation` (`id_reservation`),
+            KEY `idx_status` (`status`),
+            KEY `idx_setup_intent` (`setup_intent_id`),
+            KEY `idx_payment_intent` (`payment_intent_id`),
+            KEY `idx_date_add` (`date_add`),
+            FOREIGN KEY (`id_reservation`) REFERENCES `' . _DB_PREFIX_ . 'booker_auth_reserved` (`id_reserved`) ON DELETE CASCADE
+        ) ENGINE=' . _MYSQL_ENGINE_ . ' DEFAULT CHARSET=utf8';
+
+        $sql[] = 'CREATE TABLE IF NOT EXISTS `' . _DB_PREFIX_ . 'booking_deposit_history` (
+            `id_history` int(11) NOT NULL AUTO_INCREMENT,
+            `id_deposit` int(11) NOT NULL,
+            `id_reservation` int(11) NOT NULL,
+            `action_type` varchar(50) NOT NULL COMMENT \'created, authorized, captured, released, refunded, failed\',
+            `old_status` varchar(20) DEFAULT NULL,
+            `new_status` varchar(20) NOT NULL,
+            `amount` int(11) DEFAULT NULL COMMENT \'Montant concerné en centimes\',
+            `stripe_id` varchar(255) DEFAULT NULL COMMENT \'ID Stripe de la transaction\',
+            `details` text DEFAULT NULL COMMENT \'Détails de l\'action\',
+            `id_employee` int(11) DEFAULT NULL COMMENT \'Employé qui a effectué l\'action\',
+            `date_add` datetime NOT NULL,
+            PRIMARY KEY (`id_history`),
+            KEY `idx_deposit` (`id_deposit`),
+            KEY `idx_reservation` (`id_reservation`),
+            KEY `idx_action_type` (`action_type`),
+            KEY `idx_date_add` (`date_add`),
+            FOREIGN KEY (`id_deposit`) REFERENCES `' . _DB_PREFIX_ . 'booking_deposits` (`id_deposit`) ON DELETE CASCADE,
+            FOREIGN KEY (`id_reservation`) REFERENCES `' . _DB_PREFIX_ . 'booker_auth_reserved` (`id_reserved`) ON DELETE CASCADE
+        ) ENGINE=' . _MYSQL_ENGINE_ . ' DEFAULT CHARSET=utf8';
+
+        $sql[] = 'CREATE TABLE IF NOT EXISTS `' . _DB_PREFIX_ . 'booking_webhooks` (
+            `id_webhook` int(11) NOT NULL AUTO_INCREMENT,
+            `stripe_event_id` varchar(255) NOT NULL,
+            `event_type` varchar(100) NOT NULL,
+            `processed` tinyint(1) NOT NULL DEFAULT 0,
+            `payload` longtext DEFAULT NULL COMMENT \'JSON du webhook\',
+            `processing_result` text DEFAULT NULL,
+            `date_received` datetime NOT NULL,
+            `date_processed` datetime DEFAULT NULL,
+            PRIMARY KEY (`id_webhook`),
+            UNIQUE KEY `idx_stripe_event` (`stripe_event_id`),
+            KEY `idx_event_type` (`event_type`),
+            KEY `idx_processed` (`processed`),
+            KEY `idx_date_received` (`date_received`)
+        ) ENGINE=' . _MYSQL_ENGINE_ . ' DEFAULT CHARSET=utf8';
+
+        $sql[] = 'CREATE TABLE IF NOT EXISTS `' . _DB_PREFIX_ . 'booking_deposit_config` (
+            `id_config` int(11) NOT NULL AUTO_INCREMENT,
+            `id_booker` int(11) DEFAULT NULL COMMENT \'Configuration spécifique à un booker, NULL = global\',
+            `deposit_required` tinyint(1) NOT NULL DEFAULT 1,
+            `deposit_rate` decimal(5,2) NOT NULL DEFAULT 30.00 COMMENT \'Pourcentage de caution\',
+            `min_deposit_amount` decimal(10,2) NOT NULL DEFAULT 50.00 COMMENT \'Montant minimum de caution\',
+            `max_deposit_amount` decimal(10,2) NOT NULL DEFAULT 2000.00 COMMENT \'Montant maximum de caution\',
+            `auto_capture_delay` int(11) NOT NULL DEFAULT 24 COMMENT \'Délai avant capture auto en heures\',
+            `auto_release_delay` int(11) NOT NULL DEFAULT 168 COMMENT \'Délai avant libération auto en heures (7 jours)\',
+            `capture_on_start` tinyint(1) NOT NULL DEFAULT 0 COMMENT \'Capturer au début de la réservation\',
+            `release_on_end` tinyint(1) NOT NULL DEFAULT 1 COMMENT \'Libérer à la fin de la réservation\',
+            `date_add` datetime NOT NULL,
+            `date_upd` datetime NOT NULL,
+            PRIMARY KEY (`id_config`),
+            UNIQUE KEY `idx_booker` (`id_booker`),
+            FOREIGN KEY (`id_booker`) REFERENCES `' . _DB_PREFIX_ . 'booker` (`id_booker`) ON DELETE CASCADE
+        ) ENGINE=' . _MYSQL_ENGINE_ . ' DEFAULT CHARSET=utf8';
+
+        // Tables existantes améliorées
         $sql[] = 'CREATE TABLE IF NOT EXISTS `' . _DB_PREFIX_ . 'booker_product` (
             `id_booker` int(11) NOT NULL,
             `id_product` int(11) NOT NULL,
             `sync_price` tinyint(1) DEFAULT 1,
             `override_price` decimal(10,2) DEFAULT NULL,
+            `sync_stock` tinyint(1) DEFAULT 1,
             `date_add` datetime NOT NULL,
             PRIMARY KEY (`id_booker`, `id_product`),
             KEY `idx_product` (`id_product`)
         ) ENGINE=' . _MYSQL_ENGINE_ . ' DEFAULT CHARSET=utf8';
 
-        // Table de liaison réservations-commandes
         $sql[] = 'CREATE TABLE IF NOT EXISTS `' . _DB_PREFIX_ . 'booker_reservation_order` (
             `id_reservation` int(11) NOT NULL,
             `id_order` int(11) NOT NULL,
@@ -192,7 +308,6 @@ class Booking extends Module  {
             KEY `idx_order` (`id_order`)
         ) ENGINE=' . _MYSQL_ENGINE_ . ' DEFAULT CHARSET=utf8';
 
-        // Table de logs d'activité
         $sql[] = 'CREATE TABLE IF NOT EXISTS `' . _DB_PREFIX_ . 'booking_activity_log` (
             `id_log` int(10) unsigned NOT NULL AUTO_INCREMENT,
             `id_reservation` int(10) unsigned NULL,
@@ -200,6 +315,8 @@ class Booking extends Module  {
             `action` VARCHAR(100) NOT NULL,
             `details` TEXT NULL,
             `id_employee` int(10) unsigned NULL,
+            `ip_address` varchar(45) DEFAULT NULL,
+            `user_agent` varchar(255) DEFAULT NULL,
             `date_add` DATETIME NOT NULL,
             PRIMARY KEY (`id_log`),
             INDEX `idx_reservation` (`id_reservation`),
@@ -209,26 +326,10 @@ class Booking extends Module  {
             INDEX `idx_date_add` (`date_add`)
         ) ENGINE=' . _MYSQL_ENGINE_ . ' DEFAULT CHARSET=utf8';
 
-        // Table des sessions Stripe (pour paiements avec caution)
-        $sql[] = 'CREATE TABLE IF NOT EXISTS `' . _DB_PREFIX_ . 'booking_stripe_sessions` (
-            `id_session` int(10) unsigned NOT NULL AUTO_INCREMENT,
-            `id_reservation` int(10) unsigned NOT NULL,
-            `session_id` VARCHAR(255) NOT NULL,
-            `payment_intent_id` VARCHAR(255) NULL,
-            `status` VARCHAR(50) DEFAULT \'pending\',
-            `date_add` DATETIME NOT NULL,
-            `date_upd` DATETIME NOT NULL,
-            PRIMARY KEY (`id_session`),
-            UNIQUE KEY `idx_session_id` (`session_id`),
-            KEY `idx_reservation` (`id_reservation`),
-            KEY `idx_payment_intent` (`payment_intent_id`),
-            KEY `idx_status` (`status`)
-        ) ENGINE=' . _MYSQL_ENGINE_ . ' DEFAULT CHARSET=utf8';
-
-        // Table des traductions pour les éléments
         $sql[] = 'CREATE TABLE IF NOT EXISTS `' . _DB_PREFIX_ . 'booker_lang` (
             `id_booker` int(10) unsigned NOT NULL,
             `id_lang` int(10) unsigned NOT NULL,
+            `name` varchar(255) DEFAULT NULL,
             `description` TEXT DEFAULT NULL,
             PRIMARY KEY (`id_booker`, `id_lang`),
             KEY `idx_booker` (`id_booker`),
@@ -238,9 +339,8 @@ class Booking extends Module  {
         // Exécution des requêtes SQL avec gestion d'erreurs améliorée
         foreach ($sql as $query) {
             if (!Db::getInstance()->execute($query)) {
-                // Log l'erreur pour diagnostic
                 PrestaShopLogger::addLog(
-                    'Booking Module Install Error: ' . Db::getInstance()->getMsgError() . ' - Query: ' . $query, 
+                    'Booking Module v2.1.4 Install Error: ' . Db::getInstance()->getMsgError() . ' - Query: ' . substr($query, 0, 200) . '...', 
                     3, 
                     null, 
                     'Booking', 
@@ -251,11 +351,19 @@ class Booking extends Module  {
             }
         }
 
+        // Insérer la configuration globale par défaut pour les cautions
+        Db::getInstance()->execute('
+            INSERT IGNORE INTO `' . _DB_PREFIX_ . 'booking_deposit_config` 
+            (`id_booker`, `deposit_required`, `deposit_rate`, `min_deposit_amount`, `max_deposit_amount`, `auto_capture_delay`, `auto_release_delay`, `date_add`, `date_upd`)
+            VALUES 
+            (NULL, 1, 30.00, 50.00, 2000.00, 24, 168, NOW(), NOW())
+        ');
+
         return true;
     }
 
     /**
-     * Installation des onglets d'administration - VERSION ÉTENDUE
+     * Installation des onglets d'administration - VERSION 2.1.4 COMPLÈTE
      */
     private function installTab()
     {
@@ -279,6 +387,11 @@ class Booking extends Module  {
             array(
                 'class_name' => 'AdminBookerAuthReserved',
                 'name' => 'Réservations',
+                'parent_class_name' => 'AdminBooking'
+            ),
+            array(
+                'class_name' => 'AdminBookerDeposits',
+                'name' => 'Cautions Stripe',
                 'parent_class_name' => 'AdminBooking'
             ),
             array(
@@ -348,6 +461,7 @@ class Booking extends Module  {
             'AdminBooker',
             'AdminBookerAuth', 
             'AdminBookerAuthReserved',
+            'AdminBookerDeposits',
             'AdminBookerCalendarAvailability',
             'AdminBookerCalendarReservations',
             'AdminBookerReservations',
@@ -371,7 +485,7 @@ class Booking extends Module  {
     }
 
     /**
-     * Installation des configurations étendues
+     * Installation des configurations - VERSION 2.1.4 ÉTENDUE
      */
     private function installConfiguration()
     {
@@ -384,6 +498,22 @@ class Booking extends Module  {
             'BOOKING_AUTO_CONFIRM' => '0',
             'BOOKING_MULTI_SELECT' => '1',
             
+            // Nouveau système de cautions Stripe v2.1.4
+            'BOOKING_STRIPE_DEPOSIT_ENABLED' => '1',
+            'BOOKING_DEPOSIT_RATE' => '30',
+            'BOOKING_DEPOSIT_MIN_AMOUNT' => '50',
+            'BOOKING_DEPOSIT_MAX_AMOUNT' => '2000',
+            'BOOKING_DEPOSIT_AUTO_CAPTURE_DELAY' => '24',
+            'BOOKING_DEPOSIT_AUTO_RELEASE_DELAY' => '168',
+            'BOOKING_DEPOSIT_CAPTURE_ON_START' => '0',
+            'BOOKING_DEPOSIT_RELEASE_ON_END' => '1',
+            'BOOKING_STRIPE_WEBHOOK_SECRET' => '',
+            'BOOKING_STRIPE_TEST_MODE' => '1',
+            'BOOKING_STRIPE_TEST_SECRET_KEY' => '',
+            'BOOKING_STRIPE_TEST_PUBLIC_KEY' => '',
+            'BOOKING_STRIPE_LIVE_SECRET_KEY' => '',
+            'BOOKING_STRIPE_LIVE_PUBLIC_KEY' => '',
+            
             // Horaires d'ouverture
             'BOOKING_BUSINESS_HOURS_START' => '08:00',
             'BOOKING_BUSINESS_HOURS_END' => '18:00',
@@ -392,19 +522,23 @@ class Booking extends Module  {
             'BOOKING_CALENDAR_MAX_TIME' => '20:00',
             'BOOKING_SLOT_DURATION' => '00:30:00',
             
-            // Notifications
+            // Notifications étendues
             'BOOKING_NOTIFICATIONS_ENABLED' => '1',
             'BOOKING_AUTO_CONFIRMATION_EMAIL' => '1',
             'BOOKING_AUTO_REMINDERS' => '0',
             'BOOKING_REMINDER_HOURS' => '24',
             'BOOKING_ADMIN_EMAIL' => Configuration::get('PS_SHOP_EMAIL'),
+            'BOOKING_DEPOSIT_EMAIL_NOTIFICATIONS' => '1',
+            'BOOKING_SMS_NOTIFICATIONS' => '0',
             
-            // Stripe et paiements
+            // Stripe et paiements étendus
             'BOOKING_STRIPE_ENABLED' => '0',
-            'BOOKING_STRIPE_HOLD_DEPOSIT' => '0',
-            'BOOKING_SAVE_CARDS' => '0',
+            'BOOKING_STRIPE_HOLD_DEPOSIT' => '1',
+            'BOOKING_SAVE_CARDS' => '1',
             'BOOKING_STRIPE_PUBLISHABLE_KEY' => '',
             'BOOKING_STRIPE_SECRET_KEY' => '',
+            'BOOKING_STRIPE_CONNECT_ENABLED' => '0',
+            'BOOKING_PARTIAL_PAYMENTS' => '0',
             
             // Paramètres avancés
             'BOOKING_DEBUG_MODE' => '0',
@@ -414,6 +548,7 @@ class Booking extends Module  {
             'BOOKING_SYNC_FROM_PRODUCT' => '0',
             'BOOKING_AUTO_CREATE_PRODUCT' => '1',
             'BOOKING_DELETE_LINKED_PRODUCT' => '0',
+            'BOOKING_INVENTORY_MANAGEMENT' => '1',
             
             // Intégrations
             'BOOKING_DEFAULT_CATEGORY' => Configuration::get('PS_HOME_CATEGORY'),
@@ -421,13 +556,18 @@ class Booking extends Module  {
             'BOOKING_STATUS_PENDING_PAYMENT' => Configuration::get('PS_OS_BANKWIRE'),
             'BOOKING_GOOGLE_CALENDAR_SYNC' => '0',
             'BOOKING_GOOGLE_API_KEY' => '',
+            'BOOKING_ICAL_EXPORT' => '1',
+            'BOOKING_OUTLOOK_INTEGRATION' => '0',
             
-            // Interface et calendriers
+            // Interface et calendriers améliorés
             'BOOKING_CALENDAR_THEME' => 'default',
             'BOOKING_CALENDAR_VIEW' => 'dayGridMonth',
             'BOOKING_CALENDAR_FIRST_DAY' => '1',
             'BOOKING_CALENDAR_WEEK_NUMBERS' => '0',
             'BOOKING_CALENDAR_ALL_DAY' => '0',
+            'BOOKING_MODERN_UI' => '1',
+            'BOOKING_RESPONSIVE_DESIGN' => '1',
+            'BOOKING_DARK_MODE' => '0',
             
             // Sécurité et performances
             'BOOKING_CACHE_ENABLED' => '1',
@@ -435,12 +575,102 @@ class Booking extends Module  {
             'BOOKING_MAX_SIMULTANEOUS_BOOKINGS' => '5',
             'BOOKING_RATE_LIMIT_ENABLED' => '1',
             'BOOKING_RATE_LIMIT_REQUESTS' => '10',
-            'BOOKING_RATE_LIMIT_WINDOW' => '60'
+            'BOOKING_RATE_LIMIT_WINDOW' => '60',
+            'BOOKING_CAPTCHA_ENABLED' => '0',
+            'BOOKING_IP_WHITELIST' => '',
+            
+            // Analytics et reporting
+            'BOOKING_ANALYTICS_ENABLED' => '1',
+            'BOOKING_GOOGLE_ANALYTICS_ID' => '',
+            'BOOKING_CONVERSION_TRACKING' => '1',
+            'BOOKING_EXPORT_FORMATS' => 'csv,pdf,excel',
+            'BOOKING_AUTO_REPORTS' => '0',
+            'BOOKING_REPORT_EMAIL' => '',
+            
+            // Personnalisation avancée
+            'BOOKING_CUSTOM_CSS' => '',
+            'BOOKING_CUSTOM_JS' => '',
+            'BOOKING_LOGO_URL' => '',
+            'BOOKING_BRAND_COLORS' => '#3498db,#2ecc71,#e74c3c',
+            'BOOKING_CUSTOM_FIELDS' => '0',
+            'BOOKING_TERMS_CONDITIONS_ID' => '0'
         );
 
         foreach ($configurations as $key => $value) {
             if (!Configuration::updateValue($key, $value)) {
                 return false;
+            }
+        }
+
+        return true;
+    }
+
+    /**
+     * Installation des statuts de commande personnalisés
+     */
+    private function installOrderStates()
+    {
+        // Statut : Réservation en attente de paiement
+        $order_state = new OrderState();
+        $order_state->name = array();
+        foreach (Language::getLanguages() as $language) {
+            $order_state->name[$language['id_lang']] = 'Réservation en attente de paiement';
+        }
+        $order_state->send_email = true;
+        $order_state->color = '#FF6600';
+        $order_state->hidden = false;
+        $order_state->delivery = false;
+        $order_state->logable = true;
+        $order_state->invoice = false;
+        $order_state->module_name = $this->name;
+        $order_state->template = 'booking_pending';
+        
+        if ($order_state->add()) {
+            Configuration::updateValue('BOOKING_STATUS_PENDING_PAYMENT', $order_state->id);
+        }
+
+        // Statut : Caution autorisée
+        $order_state = new OrderState();
+        $order_state->name = array();
+        foreach (Language::getLanguages() as $language) {
+            $order_state->name[$language['id_lang']] = 'Caution autorisée';
+        }
+        $order_state->send_email = true;
+        $order_state->color = '#3498db';
+        $order_state->hidden = false;
+        $order_state->delivery = false;
+        $order_state->logable = true;
+        $order_state->invoice = false;
+        $order_state->module_name = $this->name;
+        $order_state->template = 'deposit_authorized';
+        
+        if ($order_state->add()) {
+            Configuration::updateValue('BOOKING_STATUS_DEPOSIT_AUTHORIZED', $order_state->id);
+        }
+
+        return true;
+    }
+
+    /**
+     * Créer les dossiers nécessaires
+     */
+    private function createDirectories()
+    {
+        $directories = array(
+            $this->getLocalPath() . 'logs/',
+            $this->getLocalPath() . 'exports/',
+            $this->getLocalPath() . 'uploads/',
+            $this->getLocalPath() . 'cache/'
+        );
+
+        foreach ($directories as $dir) {
+            if (!file_exists($dir)) {
+                if (!mkdir($dir, 0755, true)) {
+                    return false;
+                }
+                
+                // Créer .htaccess pour sécuriser
+                file_put_contents($dir . '.htaccess', 'deny from all');
             }
         }
 
@@ -455,19 +685,13 @@ class Booking extends Module  {
         $configurations = array(
             'BOOKING_DEFAULT_PRICE', 'BOOKING_DEPOSIT_AMOUNT', 'BOOKING_DEFAULT_DURATION',
             'BOOKING_EXPIRY_HOURS', 'BOOKING_AUTO_CONFIRM', 'BOOKING_MULTI_SELECT',
+            'BOOKING_STRIPE_DEPOSIT_ENABLED', 'BOOKING_DEPOSIT_RATE', 'BOOKING_DEPOSIT_MIN_AMOUNT',
+            'BOOKING_DEPOSIT_MAX_AMOUNT', 'BOOKING_DEPOSIT_AUTO_CAPTURE_DELAY', 'BOOKING_DEPOSIT_AUTO_RELEASE_DELAY',
             'BOOKING_BUSINESS_HOURS_START', 'BOOKING_BUSINESS_HOURS_END', 'BOOKING_ALLOWED_DAYS',
-            'BOOKING_CALENDAR_MIN_TIME', 'BOOKING_CALENDAR_MAX_TIME', 'BOOKING_SLOT_DURATION',
             'BOOKING_NOTIFICATIONS_ENABLED', 'BOOKING_AUTO_CONFIRMATION_EMAIL', 'BOOKING_AUTO_REMINDERS',
-            'BOOKING_REMINDER_HOURS', 'BOOKING_ADMIN_EMAIL', 'BOOKING_STRIPE_ENABLED',
-            'BOOKING_STRIPE_HOLD_DEPOSIT', 'BOOKING_SAVE_CARDS', 'BOOKING_STRIPE_PUBLISHABLE_KEY',
-            'BOOKING_STRIPE_SECRET_KEY', 'BOOKING_DEBUG_MODE', 'BOOKING_MIN_BOOKING_TIME',
-            'BOOKING_MAX_BOOKING_DAYS', 'BOOKING_SYNC_PRODUCT_PRICE', 'BOOKING_SYNC_FROM_PRODUCT',
-            'BOOKING_AUTO_CREATE_PRODUCT', 'BOOKING_DELETE_LINKED_PRODUCT', 'BOOKING_DEFAULT_CATEGORY',
-            'BOOKING_DEFAULT_TAX_RULES_GROUP', 'BOOKING_STATUS_PENDING_PAYMENT', 'BOOKING_GOOGLE_CALENDAR_SYNC',
-            'BOOKING_GOOGLE_API_KEY', 'BOOKING_CALENDAR_THEME', 'BOOKING_CALENDAR_VIEW',
-            'BOOKING_CALENDAR_FIRST_DAY', 'BOOKING_CALENDAR_WEEK_NUMBERS', 'BOOKING_CALENDAR_ALL_DAY',
-            'BOOKING_CACHE_ENABLED', 'BOOKING_CACHE_LIFETIME', 'BOOKING_MAX_SIMULTANEOUS_BOOKINGS',
-            'BOOKING_RATE_LIMIT_ENABLED', 'BOOKING_RATE_LIMIT_REQUESTS', 'BOOKING_RATE_LIMIT_WINDOW'
+            'BOOKING_STRIPE_ENABLED', 'BOOKING_STRIPE_HOLD_DEPOSIT', 'BOOKING_SAVE_CARDS',
+            'BOOKING_DEBUG_MODE', 'BOOKING_MIN_BOOKING_TIME', 'BOOKING_MAX_BOOKING_DAYS',
+            'BOOKING_MODERN_UI', 'BOOKING_RESPONSIVE_DESIGN', 'BOOKING_ANALYTICS_ENABLED'
         );
 
         foreach ($configurations as $key) {
@@ -478,14 +702,19 @@ class Booking extends Module  {
     }
 
     /**
-     * Désinstallation de la base de données
+     * Désinstallation de la base de données - MISE À JOUR v2.1.4
      */
     private function uninstallDB()
     {
         $sql = array();
         
+        // Supprimer dans l'ordre des dépendances
+        $sql[] = 'DROP TABLE IF EXISTS `' . _DB_PREFIX_ . 'booking_deposit_history`';
+        $sql[] = 'DROP TABLE IF EXISTS `' . _DB_PREFIX_ . 'booking_deposits`';
+        $sql[] = 'DROP TABLE IF EXISTS `' . _DB_PREFIX_ . 'booking_deposit_config`';
+        $sql[] = 'DROP TABLE IF EXISTS `' . _DB_PREFIX_ . 'booking_webhooks`';
+        $sql[] = 'DROP TABLE IF EXISTS `' . _DB_PREFIX_ . 'booking_customers`';
         $sql[] = 'DROP TABLE IF EXISTS `' . _DB_PREFIX_ . 'booker_lang`';
-        $sql[] = 'DROP TABLE IF EXISTS `' . _DB_PREFIX_ . 'booking_stripe_sessions`';
         $sql[] = 'DROP TABLE IF EXISTS `' . _DB_PREFIX_ . 'booking_activity_log`';
         $sql[] = 'DROP TABLE IF EXISTS `' . _DB_PREFIX_ . 'booker_reservation_order`';
         $sql[] = 'DROP TABLE IF EXISTS `' . _DB_PREFIX_ . 'booker_product`';
@@ -503,51 +732,95 @@ class Booking extends Module  {
     }
 
     /**
-     * Hook d'en-tête
+     * Hook d'en-tête - AMÉLIORÉ v2.1.4
      */
     public function hookDisplayHeader()
     {
         if ($this->context->controller instanceof AdminController) {
-            $this->context->controller->addCSS($this->_path . 'views/css/admin-booking.css');
-            $this->context->controller->addJS($this->_path . 'views/js/admin-booking.js');
+            $this->context->controller->addCSS($this->_path . 'views/css/admin-calendar.css');
+            $this->context->controller->addCSS($this->_path . 'views/css/back.css');
+            $this->context->controller->addJS($this->_path . 'views/js/back.js');
+            
+            // CSS spécifique pour les cautions
+            if (strpos($_SERVER['REQUEST_URI'], 'AdminBookerDeposits') !== false) {
+                $this->context->controller->addCSS($this->_path . 'views/css/deposits.css');
+            }
+        }
+        
+        // Stripe JS pour le front-office
+        if (Configuration::get('BOOKING_STRIPE_ENABLED') && 
+            !($this->context->controller instanceof AdminController)) {
+            $this->context->controller->addJS('https://js.stripe.com/v3/');
         }
     }
 
     /**
-     * Hook média front
+     * Hook média front - ÉTENDU v2.1.4
      */
     public function hookActionFrontControllerSetMedia()
     {
-        $this->context->controller->addCSS($this->_path . 'views/css/booking-front.css');
+        // CSS moderne responsive
+        $this->context->controller->addCSS($this->_path . 'views/css/booking-modern.css');
+        $this->context->controller->addCSS($this->_path . 'views/css/front.css');
+        
+        // JavaScript moderne avec gestion Stripe
+        $this->context->controller->addJS($this->_path . 'views/js/booking-manager.js');
         $this->context->controller->addJS($this->_path . 'views/js/booking-front.js');
+        
+        // Configuration JavaScript pour Stripe
+        if (Configuration::get('BOOKING_STRIPE_ENABLED')) {
+            $stripe_config = array(
+                'publicKey' => Configuration::get('BOOKING_STRIPE_TEST_MODE') ? 
+                              Configuration::get('BOOKING_STRIPE_TEST_PUBLIC_KEY') : 
+                              Configuration::get('BOOKING_STRIPE_LIVE_PUBLIC_KEY'),
+                'depositEnabled' => Configuration::get('BOOKING_STRIPE_DEPOSIT_ENABLED'),
+                'depositRate' => Configuration::get('BOOKING_DEPOSIT_RATE', 30)
+            );
+            
+            Media::addJsDef(array(
+                'bookingStripeConfig' => $stripe_config
+            ));
+        }
     }
 
     /**
-     * Hook back-office header avec chargement des scripts calendrier
+     * Hook back-office header - ÉTENDU v2.1.4
      */
     public function hookDisplayBackOfficeHeader()
     {
         if (Tools::getValue('configure') == $this->name || 
             strpos($_SERVER['REQUEST_URI'], 'AdminBooker') !== false) {
             
-            $this->context->controller->addCSS($this->_path . 'views/css/admin-calendar.css');
+            // FullCalendar et dépendances
             $this->context->controller->addJS([
                 'https://cdnjs.cloudflare.com/ajax/libs/fullcalendar/6.1.8/index.global.min.js',
                 'https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.29.4/moment.min.js',
                 $this->_path . 'views/js/availability-calendar.js',
-                $this->_path . 'views/js/reservation-calendar.js',
-                $this->_path . 'views/js/booking-utils.js'
+                $this->_path . 'views/js/reservation-calendar.js'
             ]);
+            
+            // Configuration JavaScript globale
+            Media::addJsDef(array(
+                'bookingAdminConfig' => array(
+                    'ajaxUrl' => $this->context->link->getAdminLink('AdminBooking'),
+                    'token' => Tools::getAdminTokenLite('AdminBooking'),
+                    'depositEnabled' => Configuration::get('BOOKING_STRIPE_DEPOSIT_ENABLED'),
+                    'moduleDir' => $this->_path
+                )
+            ));
         }
     }
 
     /**
-     * Hook pour traitement des cron jobs
+     * Hook pour traitement des cron jobs - ÉTENDU v2.1.4
      */
     public function hookActionCronJob()
     {
         // Nettoyer les réservations expirées
-        $this->cleanExpiredReservations();
+        BookerAuthReserved::cancelExpiredReservations();
+        
+        // Traitement automatique des cautions
+        $this->processAutomaticDeposits();
         
         // Envoyer les rappels de réservation
         if (Configuration::get('BOOKING_AUTO_REMINDERS')) {
@@ -558,65 +831,282 @@ class Booking extends Module  {
         if (Configuration::get('BOOKING_GOOGLE_CALENDAR_SYNC')) {
             $this->syncGoogleCalendar();
         }
-    }
-
-    /**
-     * Nettoyer les réservations expirées
-     */
-    private function cleanExpiredReservations()
-    {
-        $sql = 'UPDATE `' . _DB_PREFIX_ . 'booker_auth_reserved` 
-                SET `status` = 5 
-                WHERE `status` = 0 
-                AND `date_expiry` < NOW()';
         
-        Db::getInstance()->execute($sql);
-    }
-
-    /**
-     * Envoyer les rappels de réservation
-     */
-    private function sendBookingReminders()
-    {
-        $reminder_hours = Configuration::get('BOOKING_REMINDER_HOURS', 24);
+        // Nettoyer les logs anciens
+        $this->cleanOldLogs();
         
-        $sql = 'SELECT * FROM `' . _DB_PREFIX_ . 'booker_auth_reserved` 
-                WHERE `status` IN (1, 3) 
-                AND `date_reserved` = DATE_ADD(CURDATE(), INTERVAL ' . (int)$reminder_hours . ' HOUR)';
-        
-        $reservations = Db::getInstance()->executeS($sql);
-        
-        foreach ($reservations as $reservation) {
-            // Envoyer email de rappel
-            $this->sendReminderEmail($reservation);
+        // Générer les rapports automatiques
+        if (Configuration::get('BOOKING_AUTO_REPORTS')) {
+            $this->generateAutomaticReports();
         }
     }
 
     /**
-     * Synchroniser avec Google Calendar
+     * Traitement automatique des cautions selon leur statut
      */
-    private function syncGoogleCalendar()
+    private function processAutomaticDeposits()
     {
-        // À implémenter selon les besoins
-        // Utiliser l'API Google Calendar pour synchroniser les réservations
+        if (!Configuration::get('BOOKING_STRIPE_DEPOSIT_ENABLED')) {
+            return;
+        }
+        
+        $depositManager = new StripeDepositManager();
+        
+        // Capturer automatiquement les cautions dont le délai est dépassé
+        if (Configuration::get('BOOKING_DEPOSIT_CAPTURE_ON_START')) {
+            $auto_capture_delay = Configuration::get('BOOKING_DEPOSIT_AUTO_CAPTURE_DELAY', 24);
+            
+            $sql = 'SELECT r.id_reserved 
+                    FROM `' . _DB_PREFIX_ . 'booker_auth_reserved` r
+                    LEFT JOIN `' . _DB_PREFIX_ . 'booking_deposits` d ON r.id_reserved = d.id_reservation
+                    WHERE d.status = "authorized"
+                    AND r.auto_capture_date IS NOT NULL
+                    AND r.auto_capture_date <= NOW()';
+            
+            $reservations = Db::getInstance()->executeS($sql);
+            
+            foreach ($reservations as $reservation) {
+                $depositManager->captureDeposit($reservation['id_reserved']);
+            }
+        }
+        
+        // Libérer automatiquement les cautions après la réservation
+        if (Configuration::get('BOOKING_DEPOSIT_RELEASE_ON_END')) {
+            $auto_release_delay = Configuration::get('BOOKING_DEPOSIT_AUTO_RELEASE_DELAY', 168);
+            
+            $sql = 'SELECT r.id_reserved 
+                    FROM `' . _DB_PREFIX_ . 'booker_auth_reserved` r
+                    LEFT JOIN `' . _DB_PREFIX_ . 'booking_deposits` d ON r.id_reserved = d.id_reservation
+                    WHERE d.status = "authorized"
+                    AND r.status = ' . BookerAuthReserved::STATUS_COMPLETED . '
+                    AND r.date_upd < DATE_SUB(NOW(), INTERVAL ' . (int)$auto_release_delay . ' HOUR)';
+            
+            $reservations = Db::getInstance()->executeS($sql);
+            
+            foreach ($reservations as $reservation) {
+                $depositManager->releaseDeposit($reservation['id_reserved']);
+            }
+        }
     }
 
     /**
-     * Page de configuration étendue
+     * Envoyer les rappels de réservation - AMÉLIORÉ v2.1.4
+     */
+    private function sendBookingReminders()
+    {
+        if (!Configuration::get('BOOKING_NOTIFICATIONS_ENABLED')) {
+            return;
+        }
+        
+        $reminder_hours = Configuration::get('BOOKING_REMINDER_HOURS', 24);
+        $notification_system = new BookingNotificationSystem();
+        
+        $sql = 'SELECT * FROM `' . _DB_PREFIX_ . 'booker_auth_reserved` 
+                WHERE `status` IN (' . BookerAuthReserved::STATUS_ACCEPTED . ', ' . BookerAuthReserved::STATUS_PAID . ') 
+                AND `date_reserved` = DATE_ADD(CURDATE(), INTERVAL ' . (int)$reminder_hours . ' HOUR)
+                AND reminder_sent = 0';
+        
+        $reservations = Db::getInstance()->executeS($sql);
+        
+        foreach ($reservations as $reservation) {
+            if ($notification_system->sendReminderEmail($reservation)) {
+                // Marquer le rappel comme envoyé
+                Db::getInstance()->execute('
+                    UPDATE `' . _DB_PREFIX_ . 'booker_auth_reserved` 
+                    SET reminder_sent = 1 
+                    WHERE id_reserved = ' . (int)$reservation['id_reserved']
+                );
+            }
+        }
+    }
+
+    /**
+     * Nettoyer les anciens logs
+     */
+    private function cleanOldLogs()
+    {
+        $retention_days = 90; // Garder 90 jours de logs
+        
+        // Nettoyer les logs d'activité
+        Db::getInstance()->execute('
+            DELETE FROM `' . _DB_PREFIX_ . 'booking_activity_log` 
+            WHERE date_add < DATE_SUB(NOW(), INTERVAL ' . (int)$retention_days . ' DAY)
+        ');
+        
+        // Nettoyer les webhooks traités
+        Db::getInstance()->execute('
+            DELETE FROM `' . _DB_PREFIX_ . 'booking_webhooks` 
+            WHERE processed = 1 
+            AND date_received < DATE_SUB(NOW(), INTERVAL 30 DAY)
+        ');
+    }
+
+    /**
+     * Hook de validation de commande - NOUVEAU v2.1.4
+     */
+    public function hookActionValidateOrder($params)
+    {
+        $order = $params['order'];
+        $cart = $params['cart'];
+        
+        // Vérifier si la commande contient des réservations
+        $this->linkOrderToReservations($order, $cart);
+    }
+
+    /**
+     * Lier une commande aux réservations correspondantes
+     */
+    private function linkOrderToReservations($order, $cart)
+    {
+        // Rechercher les réservations en attente pour ce client
+        $sql = 'SELECT * FROM `' . _DB_PREFIX_ . 'booker_auth_reserved` 
+                WHERE customer_email = "' . pSQL($order->getCustomer()->email) . '"
+                AND status = ' . BookerAuthReserved::STATUS_PENDING_PAYMENT . '
+                AND id_order IS NULL
+                ORDER BY date_add DESC
+                LIMIT 1';
+        
+        $reservation = Db::getInstance()->getRow($sql);
+        
+        if ($reservation) {
+            // Lier la réservation à la commande
+            Db::getInstance()->execute('
+                UPDATE `' . _DB_PREFIX_ . 'booker_auth_reserved` 
+                SET id_order = ' . (int)$order->id . ',
+                    status = ' . BookerAuthReserved::STATUS_PAID . ',
+                    payment_status = "captured",
+                    date_upd = NOW()
+                WHERE id_reserved = ' . (int)$reservation['id_reserved']
+            );
+            
+            // Logger l'activité
+            $this->logActivity('order_linked', 'Commande #' . $order->id . ' liée à la réservation', $reservation['id_reserved']);
+        }
+    }
+
+    /**
+     * Logger une activité
+     */
+    private function logActivity($action, $details = null, $id_reservation = null, $id_booker = null)
+    {
+        $employee_id = isset($this->context->employee) ? $this->context->employee->id : null;
+        $ip_address = Tools::getRemoteAddr();
+        $user_agent = isset($_SERVER['HTTP_USER_AGENT']) ? $_SERVER['HTTP_USER_AGENT'] : '';
+        
+        return Db::getInstance()->execute('
+            INSERT INTO `' . _DB_PREFIX_ . 'booking_activity_log`
+            (id_reservation, id_booker, action, details, id_employee, ip_address, user_agent, date_add)
+            VALUES (
+                ' . ($id_reservation ? (int)$id_reservation : 'NULL') . ',
+                ' . ($id_booker ? (int)$id_booker : 'NULL') . ',
+                "' . pSQL($action) . '",
+                ' . ($details ? '"' . pSQL($details) . '"' : 'NULL') . ',
+                ' . ($employee_id ? (int)$employee_id : 'NULL') . ',
+                "' . pSQL($ip_address) . '",
+                "' . pSQL(substr($user_agent, 0, 255)) . '",
+                NOW()
+            )
+        ');
+    }
+
+    /**
+     * Page de configuration étendue - VERSION 2.1.4
      */
     public function getContent()
     {
         $output = '';
 
+        // Traitement des formulaires
         if (Tools::isSubmit('submitBookingConfig')) {
             $output .= $this->postProcess();
+        } elseif (Tools::isSubmit('submitStripeConfig')) {
+            $output .= $this->postProcessStripe();
+        } elseif (Tools::isSubmit('testStripeConnection')) {
+            $output .= $this->testStripeConnection();
         }
 
-        return $output . $this->displayForm();
+        // Afficher les alertes importantes
+        $output .= $this->displayAlerts();
+
+        // Afficher les statistiques rapides
+        $output .= $this->displayQuickStats();
+
+        // Formulaires de configuration
+        $output .= $this->displayConfigurationTabs();
+
+        return $output;
     }
 
     /**
-     * Traitement du formulaire de configuration
+     * Afficher les alertes importantes
+     */
+    private function displayAlerts()
+    {
+        $alerts = '';
+        
+        // Vérifier la configuration Stripe
+        if (Configuration::get('BOOKING_STRIPE_ENABLED') && 
+            !Configuration::get('BOOKING_STRIPE_SECRET_KEY')) {
+            $alerts .= $this->displayWarning($this->l('Configuration Stripe incomplète. Veuillez configurer vos clés API.'));
+        }
+        
+        // Vérifier les webhooks
+        if (Configuration::get('BOOKING_STRIPE_DEPOSIT_ENABLED') && 
+            !Configuration::get('BOOKING_STRIPE_WEBHOOK_SECRET')) {
+            $alerts .= $this->displayWarning($this->l('Webhook Stripe non configuré. Les cautions ne seront pas synchronisées automatiquement.'));
+        }
+        
+        // Vérifier les permissions
+        $log_dir = $this->getLocalPath() . 'logs/';
+        if (!is_writable($log_dir)) {
+            $alerts .= $this->displayError($this->l('Le dossier logs/ n\'est pas accessible en écriture.'));
+        }
+        
+        return $alerts;
+    }
+
+    /**
+     * Afficher les statistiques rapides
+     */
+    private function displayQuickStats()
+    {
+        $stats = $this->getQuickStats();
+        
+        return $this->display(__FILE__, 'views/templates/admin/quick_stats.tpl');
+    }
+
+    /**
+     * Récupérer les statistiques rapides
+     */
+    private function getQuickStats()
+    {
+        $stats = array();
+        
+        // Réservations du jour
+        $stats['today_reservations'] = Db::getInstance()->getValue('
+            SELECT COUNT(*) FROM `' . _DB_PREFIX_ . 'booker_auth_reserved`
+            WHERE DATE(date_add) = CURDATE()
+        ');
+        
+        // Cautions en attente
+        $stats['pending_deposits'] = Db::getInstance()->getValue('
+            SELECT COUNT(*) FROM `' . _DB_PREFIX_ . 'booking_deposits`
+            WHERE status = "pending"
+        ');
+        
+        // Chiffre d'affaires du mois
+        $stats['monthly_revenue'] = Db::getInstance()->getValue('
+            SELECT SUM(total_price) FROM `' . _DB_PREFIX_ . 'booker_auth_reserved`
+            WHERE MONTH(date_add) = MONTH(CURDATE())
+            AND YEAR(date_add) = YEAR(CURDATE())
+            AND status IN (' . BookerAuthReserved::STATUS_PAID . ', ' . BookerAuthReserved::STATUS_COMPLETED . ')
+        ');
+        
+        return $stats;
+    }
+
+    /**
+     * Traitement du formulaire principal
      */
     private function postProcess()
     {
@@ -626,11 +1116,83 @@ class Booking extends Module  {
             Configuration::updateValue($key, Tools::getValue($key));
         }
 
+        $this->logActivity('config_updated', 'Configuration principale mise à jour');
+        
         return $this->displayConfirmation($this->l('Configuration mise à jour avec succès.'));
     }
 
     /**
-     * Affichage du formulaire de configuration étendu
+     * Traitement de la configuration Stripe
+     */
+    private function postProcessStripe()
+    {
+        $stripe_keys = array(
+            'BOOKING_STRIPE_TEST_SECRET_KEY',
+            'BOOKING_STRIPE_TEST_PUBLIC_KEY',
+            'BOOKING_STRIPE_LIVE_SECRET_KEY',
+            'BOOKING_STRIPE_LIVE_PUBLIC_KEY',
+            'BOOKING_STRIPE_WEBHOOK_SECRET',
+            'BOOKING_STRIPE_TEST_MODE',
+            'BOOKING_STRIPE_DEPOSIT_ENABLED'
+        );
+        
+        foreach ($stripe_keys as $key) {
+            Configuration::updateValue($key, Tools::getValue($key));
+        }
+        
+        $this->logActivity('stripe_config_updated', 'Configuration Stripe mise à jour');
+        
+        return $this->displayConfirmation($this->l('Configuration Stripe mise à jour avec succès.'));
+    }
+
+    /**
+     * Tester la connexion Stripe
+     */
+    private function testStripeConnection()
+    {
+        try {
+            $depositManager = new StripeDepositManager();
+            
+            // Test simple : récupérer les informations du compte
+            $test_mode = Configuration::get('BOOKING_STRIPE_TEST_MODE');
+            $secret_key = $test_mode ? 
+                         Configuration::get('BOOKING_STRIPE_TEST_SECRET_KEY') : 
+                         Configuration::get('BOOKING_STRIPE_LIVE_SECRET_KEY');
+            
+            if (empty($secret_key)) {
+                throw new Exception('Clé secrète Stripe non configurée');
+            }
+            
+            // Initialiser Stripe avec la clé
+            \Stripe\Stripe::setApiKey($secret_key);
+            $account = \Stripe\Account::retrieve();
+            
+            $mode = $test_mode ? 'test' : 'live';
+            return $this->displayConfirmation(
+                $this->l('Connexion Stripe réussie !') . '<br>' .
+                $this->l('Compte :') . ' ' . $account->display_name . '<br>' .
+                $this->l('Mode :') . ' ' . $mode
+            );
+            
+        } catch (Exception $e) {
+            return $this->displayError(
+                $this->l('Erreur de connexion Stripe :') . ' ' . $e->getMessage()
+            );
+        }
+    }
+
+    /**
+     * Afficher les onglets de configuration
+     */
+    private function displayConfigurationTabs()
+    {
+        // Code pour générer les onglets de configuration
+        // À implémenter selon les besoins spécifiques
+        return $this->displayForm();
+    }
+
+    /**
+     * Formulaire de configuration simplifié pour la v2.1.4
      */
     private function displayForm()
     {
@@ -657,147 +1219,97 @@ class Booking extends Module  {
     }
 
     /**
-     * Structure du formulaire de configuration étendu
+     * Structure du formulaire de configuration - MISE À JOUR v2.1.4
      */
     private function getConfigForm()
     {
         return array(
             'form' => array(
                 'legend' => array(
-                    'title' => $this->l('Configuration du module de réservations'),
+                    'title' => $this->l('Configuration du module de réservations v2.1.4'),
                     'icon' => 'icon-cogs',
                 ),
+                'description' => $this->l('Nouvelle version avec gestion avancée des cautions Stripe et empreinte carte bancaire.'),
                 'input' => array(
                     array(
-                        'type' => 'text',
-                        'label' => $this->l('Prix par défaut'),
-                        'name' => 'BOOKING_DEFAULT_PRICE',
-                        'suffix' => '€',
-                        'class' => 'fixed-width-sm',
-                        'desc' => $this->l('Prix par défaut pour les réservations'),
-                    ),
-                    array(
-                        'type' => 'text',
-                        'label' => $this->l('Montant de la caution'),
-                        'name' => 'BOOKING_DEPOSIT_AMOUNT',
-                        'suffix' => '€',
-                        'class' => 'fixed-width-sm',
-                        'desc' => $this->l('Montant de la caution à bloquer via Stripe'),
-                    ),
-                    array(
-                        'type' => 'text',
-                        'label' => $this->l('Durée par défaut'),
-                        'name' => 'BOOKING_DEFAULT_DURATION',
-                        'suffix' => 'min',
-                        'class' => 'fixed-width-sm',
-                        'desc' => $this->l('Durée par défaut des créneaux de réservation'),
-                    ),
-                    array(
-                        'type' => 'text',
-                        'label' => $this->l('Délai d\'expiration'),
-                        'name' => 'BOOKING_EXPIRY_HOURS',
-                        'suffix' => 'heures',
-                        'class' => 'fixed-width-sm',
-                        'desc' => $this->l('Délai avant expiration des réservations non confirmées'),
+                        'type' => 'switch',
+                        'label' => $this->l('Interface moderne'),
+                        'name' => 'BOOKING_MODERN_UI',
+                        'values' => array(
+                            array('id' => 'modern_on', 'value' => 1, 'label' => $this->l('Activé')),
+                            array('id' => 'modern_off', 'value' => 0, 'label' => $this->l('Désactivé'))
+                        ),
+                        'desc' => $this->l('Utiliser la nouvelle interface moderne et responsive'),
                     ),
                     array(
                         'type' => 'switch',
-                        'label' => $this->l('Confirmation automatique'),
-                        'name' => 'BOOKING_AUTO_CONFIRM',
+                        'label' => $this->l('Cautions Stripe'),
+                        'name' => 'BOOKING_STRIPE_DEPOSIT_ENABLED',
                         'values' => array(
-                            array('id' => 'active_on', 'value' => 1, 'label' => $this->l('Activé')),
-                            array('id' => 'active_off', 'value' => 0, 'label' => $this->l('Désactivé'))
+                            array('id' => 'deposit_on', 'value' => 1, 'label' => $this->l('Activé')),
+                            array('id' => 'deposit_off', 'value' => 0, 'label' => $this->l('Désactivé'))
                         ),
-                        'desc' => $this->l('Confirmer automatiquement les réservations sans validation manuelle'),
-                    ),
-                    array(
-                        'type' => 'switch',
-                        'label' => $this->l('Paiements Stripe'),
-                        'name' => 'BOOKING_STRIPE_ENABLED',
-                        'values' => array(
-                            array('id' => 'stripe_on', 'value' => 1, 'label' => $this->l('Activé')),
-                            array('id' => 'stripe_off', 'value' => 0, 'label' => $this->l('Désactivé'))
-                        ),
-                        'desc' => $this->l('Activer les paiements et cautions via Stripe'),
+                        'desc' => $this->l('Activer le système de cautions avec empreinte CB'),
                     ),
                     array(
                         'type' => 'text',
-                        'label' => $this->l('Clé publique Stripe'),
-                        'name' => 'BOOKING_STRIPE_PUBLISHABLE_KEY',
-                        'size' => 50,
-                        'desc' => $this->l('Clé publique de votre compte Stripe'),
-                    ),
-                    array(
-                        'type' => 'text',
-                        'label' => $this->l('Clé secrète Stripe'),
-                        'name' => 'BOOKING_STRIPE_SECRET_KEY',
-                        'size' => 50,
-                        'desc' => $this->l('Clé secrète de votre compte Stripe'),
+                        'label' => $this->l('Taux de caution (%)'),
+                        'name' => 'BOOKING_DEPOSIT_RATE',
+                        'suffix' => '%',
+                        'class' => 'fixed-width-sm',
+                        'desc' => $this->l('Pourcentage du montant total à pré-autoriser en caution'),
                     ),
                     array(
                         'type' => 'switch',
-                        'label' => $this->l('Synchroniser prix produits'),
-                        'name' => 'BOOKING_SYNC_PRODUCT_PRICE',
+                        'label' => $this->l('Mode test Stripe'),
+                        'name' => 'BOOKING_STRIPE_TEST_MODE',
                         'values' => array(
-                            array('id' => 'sync_on', 'value' => 1, 'label' => $this->l('Activé')),
-                            array('id' => 'sync_off', 'value' => 0, 'label' => $this->l('Désactivé'))
+                            array('id' => 'test_on', 'value' => 1, 'label' => $this->l('Test')),
+                            array('id' => 'test_off', 'value' => 0, 'label' => $this->l('Live'))
                         ),
-                        'desc' => $this->l('Synchroniser automatiquement les prix entre bookers et produits'),
+                        'desc' => $this->l('Utiliser les clés de test Stripe pour les développements'),
+                    ),
+                    array(
+                        'type' => 'switch',
+                        'label' => $this->l('Notifications email'),
+                        'name' => 'BOOKING_NOTIFICATIONS_ENABLED',
+                        'values' => array(
+                            array('id' => 'notif_on', 'value' => 1, 'label' => $this->l('Activé')),
+                            array('id' => 'notif_off', 'value' => 0, 'label' => $this->l('Désactivé'))
+                        ),
+                        'desc' => $this->l('Envoyer des notifications automatiques'),
+                    ),
+                    array(
+                        'type' => 'switch',
+                        'label' => $this->l('Mode debug'),
+                        'name' => 'BOOKING_DEBUG_MODE',
+                        'values' => array(
+                            array('id' => 'debug_on', 'value' => 1, 'label' => $this->l('Activé')),
+                            array('id' => 'debug_off', 'value' => 0, 'label' => $this->l('Désactivé'))
+                        ),
+                        'desc' => $this->l('Activer les logs détaillés pour le débogage'),
                     ),
                 ),
                 'submit' => array(
-                    'title' => $this->l('Sauvegarder'),
+                    'title' => $this->l('Sauvegarder la configuration'),
+                    'class' => 'btn btn-default pull-right'
                 ),
             ),
         );
     }
 
     /**
-     * Valeurs du formulaire de configuration
+     * Valeurs du formulaire de configuration - MISE À JOUR v2.1.4
      */
     private function getConfigFormValues()
     {
         return array(
-            'BOOKING_DEFAULT_PRICE' => Configuration::get('BOOKING_DEFAULT_PRICE'),
-            'BOOKING_DEPOSIT_AMOUNT' => Configuration::get('BOOKING_DEPOSIT_AMOUNT'),
-            'BOOKING_DEFAULT_DURATION' => Configuration::get('BOOKING_DEFAULT_DURATION'),
-            'BOOKING_EXPIRY_HOURS' => Configuration::get('BOOKING_EXPIRY_HOURS'),
-            'BOOKING_AUTO_CONFIRM' => Configuration::get('BOOKING_AUTO_CONFIRM'),
-            'BOOKING_STRIPE_ENABLED' => Configuration::get('BOOKING_STRIPE_ENABLED'),
-            'BOOKING_STRIPE_PUBLISHABLE_KEY' => Configuration::get('BOOKING_STRIPE_PUBLISHABLE_KEY'),
-            'BOOKING_STRIPE_SECRET_KEY' => Configuration::get('BOOKING_STRIPE_SECRET_KEY'),
-            'BOOKING_SYNC_PRODUCT_PRICE' => Configuration::get('BOOKING_SYNC_PRODUCT_PRICE'),
-        );
-    }
-
-    /**
-     * Envoi d'email de rappel
-     */
-    private function sendReminderEmail($reservation)
-    {
-        $template_vars = array(
-            '{booking_reference}' => $reservation['booking_reference'],
-            '{customer_name}' => $reservation['customer_firstname'] . ' ' . $reservation['customer_lastname'],
-            '{date_reserved}' => $reservation['date_reserved'],
-            '{hour_from}' => $reservation['hour_from'],
-            '{hour_to}' => $reservation['hour_to']
-        );
-
-        return Mail::Send(
-            $this->context->language->id,
-            'booking_reminder',
-            $this->l('Rappel de votre réservation'),
-            $template_vars,
-            $reservation['customer_email'],
-            $reservation['customer_firstname'] . ' ' . $reservation['customer_lastname'],
-            null,
-            null,
-            null,
-            null,
-            dirname(__FILE__) . '/mails/',
-            false,
-            $this->context->shop->id
+            'BOOKING_MODERN_UI' => Configuration::get('BOOKING_MODERN_UI', 1),
+            'BOOKING_STRIPE_DEPOSIT_ENABLED' => Configuration::get('BOOKING_STRIPE_DEPOSIT_ENABLED', 1),
+            'BOOKING_DEPOSIT_RATE' => Configuration::get('BOOKING_DEPOSIT_RATE', 30),
+            'BOOKING_STRIPE_TEST_MODE' => Configuration::get('BOOKING_STRIPE_TEST_MODE', 1),
+            'BOOKING_NOTIFICATIONS_ENABLED' => Configuration::get('BOOKING_NOTIFICATIONS_ENABLED', 1),
+            'BOOKING_DEBUG_MODE' => Configuration::get('BOOKING_DEBUG_MODE', 0),
         );
     }
 }
-?>
