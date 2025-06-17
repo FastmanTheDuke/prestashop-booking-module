@@ -663,9 +663,9 @@ class AdminBookerViewController extends ModuleAdminController
     /**
      * Ajouter CSS et JS pour les calendriers
      */
-    public function setMedia()
+    public function setMedia($isNewTheme = false)
     {
-        parent::setMedia();
+        parent::setMedia($isNewTheme);
         
         // FullCalendar
         $this->addCSS('https://cdnjs.cloudflare.com/ajax/libs/fullcalendar/6.1.8/main.min.css');
