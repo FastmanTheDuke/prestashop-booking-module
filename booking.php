@@ -17,22 +17,22 @@ class Booking extends Module  {
     {
         $this->name = 'booking';
         $this->tab = 'others';
-        $this->version = '2.1.4';
+        $this->version = '2.1.5';
         $this->author = 'FastmanTheDuke';
         $this->bootstrap = true;
         $this->need_instance = 0;
         
         parent::__construct();
 
-        $this->displayName = $this->l('Système de Réservations Avancé v2.1.4');
-        $this->description = $this->l('Module complet de gestion de réservations avec cautions Stripe, empreinte CB, calendriers interactifs, statuts avancés et intégration e-commerce complète');
+        $this->displayName = $this->l('Système de Réservations Avancé v2.1.5');
+        $this->description = $this->l('Module complet de gestion de réservations avec cautions Stripe, empreinte CB, calendriers interactifs, statuts avancés et intégration e-commerce complète. Installation corrigée.');
         $this->confirmUninstall = $this->l('Êtes-vous sûr de vouloir désinstaller ce module ? Toutes les données de réservation et de caution seront perdues définitivement.');
 
         $this->ps_versions_compliancy = array('min' => '1.7.6', 'max' => _PS_VERSION_);
     }
 
     /**
-     * Installation du module - VERSION 2.1.4
+     * Installation du module - VERSION 2.1.5 CORRIGÉE
      */
     public function install()
     {
@@ -57,7 +57,7 @@ class Booking extends Module  {
     }
 
     /**
-     * Enregistrement des hooks - VERSION ÉTENDUE v2.1.4
+     * Enregistrement des hooks - VERSION ÉTENDUE v2.1.5
      */
     private function registerHooks()
     {
@@ -71,7 +71,7 @@ class Booking extends Module  {
                $this->registerHook('actionPaymentConfirmation') &&
                $this->registerHook('displayAdminProductsExtra') &&
                $this->registerHook('actionProductSave') &&
-               // Nouveaux hooks v2.1.4
+               // Nouveaux hooks v2.1.5
                $this->registerHook('actionValidateOrder') &&
                $this->registerHook('actionOrderHistoryAddAfter') &&
                $this->registerHook('displayShoppingCart') &&
@@ -82,13 +82,13 @@ class Booking extends Module  {
     }
 
     /**
-     * Installation de la base de données - VERSION 2.1.4 COMPLÈTE
+     * Installation de la base de données - VERSION 2.1.5 CORRIGÉE ET OPTIMISÉE
      */
     private function installDB()
     {
         $sql = array();
 
-        // Tables existantes mises à jour...
+        // ÉTAPE 1: Tables principales sans contraintes de clé étrangère
         $sql[] = 'CREATE TABLE IF NOT EXISTS `' . _DB_PREFIX_ . 'booker` (
             `id_booker` int(11) NOT NULL AUTO_INCREMENT,
             `id_product` int(11) DEFAULT NULL,
@@ -172,6 +172,7 @@ class Booking extends Module  {
             `deposit_status` varchar(20) DEFAULT \'none\',
             `card_fingerprint` varchar(255) DEFAULT NULL,
             `auto_capture_date` datetime DEFAULT NULL,
+            `reminder_sent` tinyint(1) DEFAULT 0,
             `notes` text,
             `admin_notes` text,
             `date_expiry` datetime DEFAULT NULL,
@@ -190,7 +191,7 @@ class Booking extends Module  {
             KEY `idx_auto_capture` (`auto_capture_date`)
         ) ENGINE=' . _MYSQL_ENGINE_ . ' DEFAULT CHARSET=utf8';
 
-        // Nouvelles tables v2.1.4 pour les cautions
+        // ÉTAPE 2: Tables du système de cautions Stripe v2.1.5
         $sql[] = 'CREATE TABLE IF NOT EXISTS `' . _DB_PREFIX_ . 'booking_customers` (
             `id_booking_customer` int(11) NOT NULL AUTO_INCREMENT,
             `id_customer` int(11) NOT NULL DEFAULT 0,
@@ -227,10 +228,10 @@ class Booking extends Module  {
             KEY `idx_status` (`status`),
             KEY `idx_setup_intent` (`setup_intent_id`),
             KEY `idx_payment_intent` (`payment_intent_id`),
-            KEY `idx_date_add` (`date_add`),
-            FOREIGN KEY (`id_reservation`) REFERENCES `' . _DB_PREFIX_ . 'booker_auth_reserved` (`id_reserved`) ON DELETE CASCADE
+            KEY `idx_date_add` (`date_add`)
         ) ENGINE=' . _MYSQL_ENGINE_ . ' DEFAULT CHARSET=utf8';
 
+        // ÉTAPE 3: Table d'historique des cautions - STRUCTURE CORRIGÉE
         $sql[] = 'CREATE TABLE IF NOT EXISTS `' . _DB_PREFIX_ . 'booking_deposit_history` (
             `id_history` int(11) NOT NULL AUTO_INCREMENT,
             `id_deposit` int(11) NOT NULL,
@@ -240,18 +241,17 @@ class Booking extends Module  {
             `new_status` varchar(20) NOT NULL,
             `amount` int(11) DEFAULT NULL COMMENT \'Montant concerné en centimes\',
             `stripe_id` varchar(255) DEFAULT NULL COMMENT \'ID Stripe de la transaction\',
-            `details` text DEFAULT NULL COMMENT \'Détails de l\'action\',
-            `id_employee` int(11) DEFAULT NULL COMMENT \'Employé qui a effectué l\'action\',
+            `details` text DEFAULT NULL COMMENT \'Détails de l\\\'action\',
+            `id_employee` int(11) DEFAULT NULL COMMENT \'Employé qui a effectué l\\\'action\',
             `date_add` datetime NOT NULL,
             PRIMARY KEY (`id_history`),
             KEY `idx_deposit` (`id_deposit`),
             KEY `idx_reservation` (`id_reservation`),
             KEY `idx_action_type` (`action_type`),
-            KEY `idx_date_add` (`date_add`),
-            FOREIGN KEY (`id_deposit`) REFERENCES `' . _DB_PREFIX_ . 'booking_deposits` (`id_deposit`) ON DELETE CASCADE,
-            FOREIGN KEY (`id_reservation`) REFERENCES `' . _DB_PREFIX_ . 'booker_auth_reserved` (`id_reserved`) ON DELETE CASCADE
+            KEY `idx_date_add` (`date_add`)
         ) ENGINE=' . _MYSQL_ENGINE_ . ' DEFAULT CHARSET=utf8';
 
+        // ÉTAPE 4: Tables système étendues
         $sql[] = 'CREATE TABLE IF NOT EXISTS `' . _DB_PREFIX_ . 'booking_webhooks` (
             `id_webhook` int(11) NOT NULL AUTO_INCREMENT,
             `stripe_event_id` varchar(255) NOT NULL,
@@ -282,11 +282,10 @@ class Booking extends Module  {
             `date_add` datetime NOT NULL,
             `date_upd` datetime NOT NULL,
             PRIMARY KEY (`id_config`),
-            UNIQUE KEY `idx_booker` (`id_booker`),
-            FOREIGN KEY (`id_booker`) REFERENCES `' . _DB_PREFIX_ . 'booker` (`id_booker`) ON DELETE CASCADE
+            UNIQUE KEY `idx_booker` (`id_booker`)
         ) ENGINE=' . _MYSQL_ENGINE_ . ' DEFAULT CHARSET=utf8';
 
-        // Tables existantes améliorées
+        // ÉTAPE 5: Tables de liaison et support
         $sql[] = 'CREATE TABLE IF NOT EXISTS `' . _DB_PREFIX_ . 'booker_product` (
             `id_booker` int(11) NOT NULL,
             `id_product` int(11) NOT NULL,
@@ -336,11 +335,11 @@ class Booking extends Module  {
             KEY `idx_lang` (`id_lang`)
         ) ENGINE=' . _MYSQL_ENGINE_ . ' DEFAULT CHARSET=utf8';
 
-        // Exécution des requêtes SQL avec gestion d'erreurs améliorée
+        // ÉTAPE 6: Exécution des requêtes SQL avec gestion d'erreurs améliorée
         foreach ($sql as $query) {
             if (!Db::getInstance()->execute($query)) {
                 PrestaShopLogger::addLog(
-                    'Booking Module v2.1.4 Install Error: ' . Db::getInstance()->getMsgError() . ' - Query: ' . substr($query, 0, 200) . '...', 
+                    'Booking Module v2.1.5 Install Error: ' . Db::getInstance()->getMsgError() . ' - Query: ' . substr($query, 0, 200) . '...', 
                     3, 
                     null, 
                     'Booking', 
@@ -351,7 +350,42 @@ class Booking extends Module  {
             }
         }
 
-        // Insérer la configuration globale par défaut pour les cautions
+        // ÉTAPE 7: Ajouter les contraintes de clé étrangère APRÈS création des tables
+        $foreign_keys = array();
+        
+        // Contraintes pour booking_deposits
+        $foreign_keys[] = 'ALTER TABLE `' . _DB_PREFIX_ . 'booking_deposits` 
+                          ADD CONSTRAINT `fk_deposits_reservation` 
+                          FOREIGN KEY (`id_reservation`) 
+                          REFERENCES `' . _DB_PREFIX_ . 'booker_auth_reserved` (`id_reserved`) 
+                          ON DELETE CASCADE';
+        
+        // Contraintes pour booking_deposit_history  
+        $foreign_keys[] = 'ALTER TABLE `' . _DB_PREFIX_ . 'booking_deposit_history` 
+                          ADD CONSTRAINT `fk_history_deposit` 
+                          FOREIGN KEY (`id_deposit`) 
+                          REFERENCES `' . _DB_PREFIX_ . 'booking_deposits` (`id_deposit`) 
+                          ON DELETE CASCADE';
+                          
+        $foreign_keys[] = 'ALTER TABLE `' . _DB_PREFIX_ . 'booking_deposit_history` 
+                          ADD CONSTRAINT `fk_history_reservation` 
+                          FOREIGN KEY (`id_reservation`) 
+                          REFERENCES `' . _DB_PREFIX_ . 'booker_auth_reserved` (`id_reserved`) 
+                          ON DELETE CASCADE';
+
+        // Contrainte pour booking_deposit_config
+        $foreign_keys[] = 'ALTER TABLE `' . _DB_PREFIX_ . 'booking_deposit_config` 
+                          ADD CONSTRAINT `fk_config_booker` 
+                          FOREIGN KEY (`id_booker`) 
+                          REFERENCES `' . _DB_PREFIX_ . 'booker` (`id_booker`) 
+                          ON DELETE CASCADE';
+
+        // Exécuter les contraintes (ignorer les erreurs si déjà présentes)
+        foreach ($foreign_keys as $constraint) {
+            Db::getInstance()->execute($constraint);
+        }
+
+        // ÉTAPE 8: Insérer la configuration globale par défaut pour les cautions
         Db::getInstance()->execute('
             INSERT IGNORE INTO `' . _DB_PREFIX_ . 'booking_deposit_config` 
             (`id_booker`, `deposit_required`, `deposit_rate`, `min_deposit_amount`, `max_deposit_amount`, `auto_capture_delay`, `auto_release_delay`, `date_add`, `date_upd`)
@@ -359,11 +393,21 @@ class Booking extends Module  {
             (NULL, 1, 30.00, 50.00, 2000.00, 24, 168, NOW(), NOW())
         ');
 
+        // Log de succès
+        PrestaShopLogger::addLog(
+            'Booking Module v2.1.5: Installation de la base de données terminée avec succès - Toutes les tables créées', 
+            1, 
+            null, 
+            'Booking', 
+            null, 
+            true
+        );
+
         return true;
     }
 
     /**
-     * Installation des onglets d'administration - VERSION 2.1.4 COMPLÈTE
+     * Installation des onglets d'administration - VERSION 2.1.5 COMPLÈTE
      */
     private function installTab()
     {
@@ -485,7 +529,7 @@ class Booking extends Module  {
     }
 
     /**
-     * Installation des configurations - VERSION 2.1.4 ÉTENDUE
+     * Installation des configurations - VERSION 2.1.5 ÉTENDUE
      */
     private function installConfiguration()
     {
@@ -498,7 +542,7 @@ class Booking extends Module  {
             'BOOKING_AUTO_CONFIRM' => '0',
             'BOOKING_MULTI_SELECT' => '1',
             
-            // Nouveau système de cautions Stripe v2.1.4
+            // Nouveau système de cautions Stripe v2.1.5
             'BOOKING_STRIPE_DEPOSIT_ENABLED' => '1',
             'BOOKING_DEPOSIT_RATE' => '30',
             'BOOKING_DEPOSIT_MIN_AMOUNT' => '50',
@@ -702,13 +746,14 @@ class Booking extends Module  {
     }
 
     /**
-     * Désinstallation de la base de données - MISE À JOUR v2.1.4
+     * Désinstallation de la base de données - MISE À JOUR v2.1.5
      */
     private function uninstallDB()
     {
         $sql = array();
         
-        // Supprimer dans l'ordre des dépendances
+        // Supprimer dans l'ordre des dépendances (contraintes FK)
+        $sql[] = 'SET FOREIGN_KEY_CHECKS = 0';
         $sql[] = 'DROP TABLE IF EXISTS `' . _DB_PREFIX_ . 'booking_deposit_history`';
         $sql[] = 'DROP TABLE IF EXISTS `' . _DB_PREFIX_ . 'booking_deposits`';
         $sql[] = 'DROP TABLE IF EXISTS `' . _DB_PREFIX_ . 'booking_deposit_config`';
@@ -721,6 +766,7 @@ class Booking extends Module  {
         $sql[] = 'DROP TABLE IF EXISTS `' . _DB_PREFIX_ . 'booker_auth_reserved`';
         $sql[] = 'DROP TABLE IF EXISTS `' . _DB_PREFIX_ . 'booker_auth`';
         $sql[] = 'DROP TABLE IF EXISTS `' . _DB_PREFIX_ . 'booker`';
+        $sql[] = 'SET FOREIGN_KEY_CHECKS = 1';
 
         foreach ($sql as $query) {
             if (!Db::getInstance()->execute($query)) {
@@ -732,7 +778,7 @@ class Booking extends Module  {
     }
 
     /**
-     * Hook d'en-tête - AMÉLIORÉ v2.1.4
+     * Hook d'en-tête - AMÉLIORÉ v2.1.5
      */
     public function hookDisplayHeader()
     {
@@ -755,7 +801,7 @@ class Booking extends Module  {
     }
 
     /**
-     * Hook média front - ÉTENDU v2.1.4
+     * Hook média front - ÉTENDU v2.1.5
      */
     public function hookActionFrontControllerSetMedia()
     {
@@ -784,7 +830,7 @@ class Booking extends Module  {
     }
 
     /**
-     * Hook back-office header - ÉTENDU v2.1.4
+     * Hook back-office header - ÉTENDU v2.1.5
      */
     public function hookDisplayBackOfficeHeader()
     {
@@ -812,7 +858,7 @@ class Booking extends Module  {
     }
 
     /**
-     * Hook pour traitement des cron jobs - ÉTENDU v2.1.4
+     * Hook pour traitement des cron jobs - ÉTENDU v2.1.5
      */
     public function hookActionCronJob()
     {
@@ -890,7 +936,7 @@ class Booking extends Module  {
     }
 
     /**
-     * Envoyer les rappels de réservation - AMÉLIORÉ v2.1.4
+     * Envoyer les rappels de réservation - AMÉLIORÉ v2.1.5
      */
     private function sendBookingReminders()
     {
@@ -942,7 +988,7 @@ class Booking extends Module  {
     }
 
     /**
-     * Hook de validation de commande - NOUVEAU v2.1.4
+     * Hook de validation de commande - NOUVEAU v2.1.5
      */
     public function hookActionValidateOrder($params)
     {
@@ -1010,7 +1056,7 @@ class Booking extends Module  {
     }
 
     /**
-     * Page de configuration étendue - VERSION 2.1.4
+     * Page de configuration étendue - VERSION 2.1.5
      */
     public function getContent()
     {
@@ -1187,12 +1233,11 @@ class Booking extends Module  {
     private function displayConfigurationTabs()
     {
         // Code pour générer les onglets de configuration
-        // À implémenter selon les besoins spécifiques
         return $this->displayForm();
     }
 
     /**
-     * Formulaire de configuration simplifié pour la v2.1.4
+     * Formulaire de configuration simplifié pour la v2.1.5
      */
     private function displayForm()
     {
@@ -1219,17 +1264,17 @@ class Booking extends Module  {
     }
 
     /**
-     * Structure du formulaire de configuration - MISE À JOUR v2.1.4
+     * Structure du formulaire de configuration - MISE À JOUR v2.1.5
      */
     private function getConfigForm()
     {
         return array(
             'form' => array(
                 'legend' => array(
-                    'title' => $this->l('Configuration du module de réservations v2.1.4'),
+                    'title' => $this->l('Configuration du module de réservations v2.1.5'),
                     'icon' => 'icon-cogs',
                 ),
-                'description' => $this->l('Nouvelle version avec gestion avancée des cautions Stripe et empreinte carte bancaire.'),
+                'description' => $this->l('Version corrigée avec installation robuste et gestion avancée des cautions Stripe.'),
                 'input' => array(
                     array(
                         'type' => 'switch',
@@ -1299,7 +1344,7 @@ class Booking extends Module  {
     }
 
     /**
-     * Valeurs du formulaire de configuration - MISE À JOUR v2.1.4
+     * Valeurs du formulaire de configuration - MISE À JOUR v2.1.5
      */
     private function getConfigFormValues()
     {
