@@ -702,9 +702,9 @@ class AdminBookerDepositsController extends ModuleAdminController
     /**
      * Ajouter CSS et JS pour les cautions
      */
-    public function setMedia()
+    public function setMedia($isNewTheme = false)
     {
-        parent::setMedia();
+        parent::setMedia($isNewTheme);
         
         $this->addCSS(_MODULE_DIR_ . 'booking/views/css/admin-deposits.css');
         $this->addJS(_MODULE_DIR_ . 'booking/views/js/admin-deposits.js');
