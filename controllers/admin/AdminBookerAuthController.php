@@ -513,9 +513,9 @@ class AdminBookerAuthController extends ModuleAdminController
     /**
      * Ajouter du CSS et JS personnalisés
      */
-    public function setMedia()
+    public function setMedia($isNewTheme = false)
     {
-        parent::setMedia();
+        parent::setMedia($isNewTheme);
         
         $this->addCSS(_MODULE_DIR_ . 'booking/views/css/admin-availability.css');
         $this->addJS(_MODULE_DIR_ . 'booking/views/js/admin-availability.js');
