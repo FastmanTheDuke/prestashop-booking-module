@@ -520,7 +520,9 @@
     font-size: 0.8em;
     padding: 4px 8px;
 }
-
+.main-menu .link-levelone#subtab-AdminBooking>.link {
+    display: block;
+}
 /* ==========================================================================
    RESPONSIVE
    ========================================================================== */
