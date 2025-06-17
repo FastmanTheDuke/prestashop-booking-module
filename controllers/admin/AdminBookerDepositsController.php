@@ -1,13 +1,11 @@
 <?php
 /**
- * Contrôleur d'administration pour la gestion des cautions Stripe
- * Module de réservations PrestaShop v2.1.5+
- * 
- * @author FastmanTheDuke
- * @version 2.1.5
+ * AdminBookerDepositsController - Gestion avancée des cautions Stripe
+ * Version 2.1.5 - Avec empreinte CB, autorisation, capture et libération
  */
 
 require_once _PS_MODULE_DIR_ . 'booking/classes/StripeDepositManager.php';
+require_once _PS_MODULE_DIR_ . 'booking/classes/BookerAuthReserved.php';
 
 class AdminBookerDepositsController extends ModuleAdminController
 {
@@ -16,540 +14,693 @@ class AdminBookerDepositsController extends ModuleAdminController
         $this->bootstrap = true;
         $this->table = 'booking_deposits';
         $this->className = 'BookingDeposit';
+        $this->identifier = 'id_deposit';
         $this->lang = false;
-        $this->addRowAction('view');
+        
+        parent::__construct();
+        
+        $this->addRowAction('view_details');
         $this->addRowAction('capture');
         $this->addRowAction('release');
         $this->addRowAction('refund');
+        $this->addRowAction('view_history');
+        
         $this->bulk_actions = array(
-            'release' => array(
-                'text' => $this->l('Libérer les cautions'),
-                'icon' => 'icon-unlock',
-                'confirm' => $this->l('Êtes-vous sûr de vouloir libérer ces cautions ?')
+            'capture_selection' => array(
+                'text' => $this->l('Capture selected'),
+                'icon' => 'icon-credit-card text-success',
+                'confirm' => $this->l('Capture the selected deposits?')
             ),
-            'capture' => array(
-                'text' => $this->l('Capturer les cautions'),
-                'icon' => 'icon-credit-card',
-                'confirm' => $this->l('Êtes-vous sûr de vouloir capturer ces cautions ?')
+            'release_selection' => array(
+                'text' => $this->l('Release selected'),
+                'icon' => 'icon-unlock text-info',
+                'confirm' => $this->l('Release the selected deposits?')
+            ),
+            'export_csv' => array(
+                'text' => $this->l('Export CSV'),
+                'icon' => 'icon-download'
             )
         );
-
-        parent::__construct();
-
-        $this->meta_title = $this->l('Gestion des Cautions Stripe');
-        $this->toolbar_title = $this->l('Cautions Stripe');
-
-        // Configuration des colonnes du tableau
+        
         $this->fields_list = array(
             'id_deposit' => array(
                 'title' => $this->l('ID'),
-                'align' => 'text-center',
+                'align' => 'center',
                 'class' => 'fixed-width-xs'
             ),
             'booking_reference' => array(
-                'title' => $this->l('Référence'),
+                'title' => $this->l('Booking Reference'),
                 'width' => 140,
-                'callback' => 'displayBookingReference'
+                'align' => 'center'
             ),
-            'customer_name' => array(
-                'title' => $this->l('Client'),
+            'customer_info' => array(
+                'title' => $this->l('Customer'),
+                'width' => 180,
+                'orderby' => false,
+                'search' => false,
+                'callback' => 'formatCustomerInfo'
+            ),
+            'booker_name' => array(
+                'title' => $this->l('Item'),
                 'width' => 150,
-                'callback' => 'displayCustomerName'
-            ),
-            'deposit_amount_display' => array(
-                'title' => $this->l('Montant caution'),
-                'width' => 120,
-                'align' => 'text-right',
-                'callback' => 'displayDepositAmount'
-            ),
-            'status' => array(
-                'title' => $this->l('Statut'),
-                'width' => 100,
-                'align' => 'text-center',
-                'callback' => 'displayStatus'
-            ),
-            'date_authorized' => array(
-                'title' => $this->l('Date autorisation'),
-                'width' => 150,
-                'type' => 'datetime'
-            ),
-            'date_add' => array(
-                'title' => $this->l('Date création'),
-                'width' => 150,
-                'type' => 'datetime'
-            ),
-            'actions' => array(
-                'title' => $this->l('Actions'),
-                'width' => 120,
-                'align' => 'text-center',
-                'callback' => 'displayActions',
                 'orderby' => false,
                 'search' => false
+            ),
+            'deposit_amount_display' => array(
+                'title' => $this->l('Deposit Amount'),
+                'width' => 120,
+                'align' => 'text-right',
+                'orderby' => false,
+                'search' => false,
+                'callback' => 'formatDepositAmount'
+            ),
+            'captured_amount_display' => array(
+                'title' => $this->l('Captured'),
+                'width' => 100,
+                'align' => 'text-right',
+                'orderby' => false,
+                'search' => false,
+                'callback' => 'formatCapturedAmount'
+            ),
+            'status_badge' => array(
+                'title' => $this->l('Status'),
+                'width' => 120,
+                'align' => 'center',
+                'orderby' => false,
+                'search' => false,
+                'callback' => 'formatStatusBadge'
+            ),
+            'stripe_info' => array(
+                'title' => $this->l('Stripe Info'),
+                'width' => 200,
+                'align' => 'center',
+                'orderby' => false,
+                'search' => false,
+                'callback' => 'formatStripeInfo'
+            ),
+            'date_authorized' => array(
+                'title' => $this->l('Authorized'),
+                'width' => 130,
+                'type' => 'datetime',
+                'align' => 'center'
+            ),
+            'date_captured' => array(
+                'title' => $this->l('Captured'),
+                'width' => 130,
+                'type' => 'datetime',
+                'align' => 'center'
+            ),
+            'date_released' => array(
+                'title' => $this->l('Released'),
+                'width' => 130,
+                'type' => 'datetime',
+                'align' => 'center'
+            ),
+            'actions' => array(
+                'title' => $this->l('Quick Actions'),
+                'width' => 150,
+                'orderby' => false,
+                'search' => false,
+                'callback' => 'formatQuickActions'
             )
         );
-
-        // Filtres de recherche
-        $this->fields_list['booking_reference']['filter_key'] = 'r!booking_reference';
-        $this->fields_list['customer_name']['filter_key'] = 'r!customer_firstname';
+        
+        $this->_select = 'r.booking_reference, r.customer_firstname, r.customer_lastname, r.customer_email,
+                         b.name as booker_name, r.date_reserved';
+        $this->_join = 'LEFT JOIN `' . _DB_PREFIX_ . 'booker_auth_reserved` r ON (a.id_reservation = r.id_reserved)
+                       LEFT JOIN `' . _DB_PREFIX_ . 'booker` b ON (r.id_booker = b.id_booker)';
+        
+        $this->shopLinkType = 'shop';
+        $this->multishop_context = Shop::CONTEXT_ALL;
     }
 
     /**
-     * Requête SQL personnalisée pour récupérer les données avec jointures
+     * Override de la liste pour ajouter les informations calculées
      */
     public function getList($id_lang, $order_by = null, $order_way = null, $start = 0, $limit = null, $id_lang_shop = false)
     {
-        // Requête personnalisée avec jointures
-        $this->_select = '
-            r.booking_reference,
-            CONCAT(r.customer_firstname, " ", r.customer_lastname) as customer_name,
-            r.customer_email,
-            r.date_reserved,
-            r.total_price,
-            b.name as booker_name,
-            (d.deposit_amount / 100) as deposit_amount_display
-        ';
-
-        $this->_join = '
-            LEFT JOIN `' . _DB_PREFIX_ . 'booker_auth_reserved` r ON (r.id_reserved = a.id_reservation)
-            LEFT JOIN `' . _DB_PREFIX_ . 'booker` b ON (b.id_booker = r.id_booker)
-        ';
-
-        $this->_where = 'AND r.id_reserved IS NOT NULL';
-
-        // Gestion du tri par défaut
-        if (!$order_by) {
-            $order_by = 'date_add';
-            $order_way = 'DESC';
-        }
-
         parent::getList($id_lang, $order_by, $order_way, $start, $limit, $id_lang_shop);
-    }
-
-    /**
-     * Afficher la référence de réservation avec lien
-     */
-    public function displayBookingReference($value, $row)
-    {
-        $link = $this->context->link->getAdminLink('AdminBookerAuthReserved');
-        return '<a href="' . $link . '&id_reserved=' . (int)$row['id_reservation'] . '&viewbooker_auth_reserved" class="btn btn-default btn-xs">
-                    <i class="icon-eye"></i> ' . Tools::safeOutput($value) . '
-                </a>';
-    }
-
-    /**
-     * Afficher le nom du client avec email
-     */
-    public function displayCustomerName($value, $row)
-    {
-        return '<strong>' . Tools::safeOutput($value) . '</strong><br>
-                <small class="text-muted">' . Tools::safeOutput($row['customer_email']) . '</small>';
-    }
-
-    /**
-     * Afficher le montant de la caution formaté
-     */
-    public function displayDepositAmount($value, $row)
-    {
-        $currency = new Currency(Configuration::get('PS_CURRENCY_DEFAULT'));
-        return '<span class="badge badge-info">' . 
-               Tools::displayPrice($value, $currency) . 
-               '</span>';
-    }
-
-    /**
-     * Afficher le statut avec badge coloré
-     */
-    public function displayStatus($value, $row)
-    {
-        $badges = array(
-            'pending' => '<span class="badge badge-warning">En attente</span>',
-            'authorized' => '<span class="badge badge-success">Autorisée</span>',
-            'captured' => '<span class="badge badge-danger">Capturée</span>',
-            'released' => '<span class="badge badge-info">Libérée</span>',
-            'failed' => '<span class="badge badge-danger">Échec</span>',
-            'cancelled' => '<span class="badge badge-default">Annulée</span>'
-        );
-
-        return isset($badges[$value]) ? $badges[$value] : '<span class="badge badge-default">' . $value . '</span>';
-    }
-
-    /**
-     * Afficher les actions disponibles selon le statut
-     */
-    public function displayActions($value, $row)
-    {
-        $actions = '';
-        $id_deposit = (int)$row['id_deposit'];
         
-        // Action de visualisation
-        $actions .= '<a href="' . self::$currentIndex . '&id_deposit=' . $id_deposit . '&viewbooking_deposits&token=' . $this->token . '" 
-                        class="btn btn-default btn-xs" title="Voir les détails">
-                        <i class="icon-eye"></i>
-                     </a> ';
+        if (!empty($this->_list)) {
+            foreach ($this->_list as &$row) {
+                // Calculer les montants en euros
+                $row['deposit_amount_display'] = $row['deposit_amount'] / 100;
+                $row['captured_amount_display'] = $row['captured_amount'] / 100;
+                $row['refunded_amount_display'] = $row['refunded_amount'] / 100;
+                
+                // Informations client combinées
+                $row['customer_info'] = trim($row['customer_firstname'] . ' ' . $row['customer_lastname']);
+                if (empty($row['customer_info'])) {
+                    $row['customer_info'] = $row['customer_email'];
+                }
+            }
+        }
+    }
 
-        // Actions selon le statut
-        switch ($row['status']) {
+    /**
+     * Formatter pour les informations client
+     */
+    public static function formatCustomerInfo($customer_info, $row)
+    {
+        $name = trim($customer_info);
+        $email = $row['customer_email'];
+        
+        return '<strong>' . $name . '</strong><br><small class="text-muted">' . $email . '</small>';
+    }
+
+    /**
+     * Formatter pour le montant de caution
+     */
+    public static function formatDepositAmount($amount, $row)
+    {
+        $amount_euros = $amount;
+        $currency = Context::getContext()->currency->sign;
+        
+        $color = 'info';
+        if ($row['status'] == 'captured') {
+            $color = 'danger';
+        } elseif ($row['status'] == 'released') {
+            $color = 'success';
+        }
+        
+        return '<span class="label label-' . $color . '">' . $amount_euros . ' ' . $currency . '</span>';
+    }
+
+    /**
+     * Formatter pour le montant capturé
+     */
+    public static function formatCapturedAmount($amount, $row)
+    {
+        $amount_euros = $amount;
+        $currency = Context::getContext()->currency->sign;
+        
+        if ($amount_euros > 0) {
+            return '<span class="label label-danger">' . $amount_euros . ' ' . $currency . '</span>';
+        }
+        
+        return '<span class="text-muted">-</span>';
+    }
+
+    /**
+     * Formatter pour le badge de statut
+     */
+    public static function formatStatusBadge($status, $row)
+    {
+        $statuses = array(
+            'pending' => array('label' => 'Pending', 'color' => 'warning'),
+            'authorized' => array('label' => 'Authorized', 'color' => 'info'),
+            'captured' => array('label' => 'Captured', 'color' => 'danger'),
+            'released' => array('label' => 'Released', 'color' => 'success'),
+            'failed' => array('label' => 'Failed', 'color' => 'danger'),
+            'cancelled' => array('label' => 'Cancelled', 'color' => 'default')
+        );
+        
+        $status_info = isset($statuses[$row['status']]) ? $statuses[$row['status']] : array('label' => 'Unknown', 'color' => 'default');
+        
+        return '<span class="label label-' . $status_info['color'] . '">' . $status_info['label'] . '</span>';
+    }
+
+    /**
+     * Formatter pour les informations Stripe
+     */
+    public static function formatStripeInfo($stripe_info, $row)
+    {
+        $html = '';
+        
+        if (!empty($row['setup_intent_id'])) {
+            $html .= '<small title="Setup Intent"><i class="icon-cog"></i> ' . substr($row['setup_intent_id'], -8) . '</small><br>';
+        }
+        
+        if (!empty($row['payment_intent_id'])) {
+            $html .= '<small title="Payment Intent"><i class="icon-credit-card"></i> ' . substr($row['payment_intent_id'], -8) . '</small><br>';
+        }
+        
+        if (!empty($row['payment_method_id'])) {
+            $html .= '<small title="Payment Method"><i class="icon-lock"></i> ' . substr($row['payment_method_id'], -8) . '</small>';
+        }
+        
+        return $html ?: '<span class="text-muted">No Stripe data</span>';
+    }
+
+    /**
+     * Formatter pour les actions rapides
+     */
+    public static function formatQuickActions($actions, $row)
+    {
+        $html = '';
+        $status = $row['status'];
+        $id_deposit = $row['id_deposit'];
+        
+        $base_url = Context::getContext()->link->getAdminLink('AdminBookerDeposits');
+        
+        switch ($status) {
             case 'authorized':
-                $actions .= '<a href="' . self::$currentIndex . '&id_deposit=' . $id_deposit . '&capture_deposit&token=' . $this->token . '" 
-                                class="btn btn-warning btn-xs" title="Capturer la caution" 
-                                onclick="return confirm(\'Êtes-vous sûr de vouloir capturer cette caution ?\')">
-                                <i class="icon-credit-card"></i>
-                             </a> ';
-                $actions .= '<a href="' . self::$currentIndex . '&id_deposit=' . $id_deposit . '&release_deposit&token=' . $this->token . '" 
-                                class="btn btn-success btn-xs" title="Libérer la caution"
-                                onclick="return confirm(\'Êtes-vous sûr de vouloir libérer cette caution ?\')">
-                                <i class="icon-unlock"></i>
-                             </a>';
+                $html .= '<a href="' . $base_url . '&capture_deposit=' . $id_deposit . '" class="btn btn-xs btn-success" title="Capture" onclick="return confirm(\'Capture this deposit?\')">
+                            <i class="icon-credit-card"></i>
+                          </a> ';
+                $html .= '<a href="' . $base_url . '&release_deposit=' . $id_deposit . '" class="btn btn-xs btn-info" title="Release" onclick="return confirm(\'Release this deposit?\')">
+                            <i class="icon-unlock"></i>
+                          </a>';
                 break;
                 
             case 'captured':
-                $actions .= '<a href="' . self::$currentIndex . '&id_deposit=' . $id_deposit . '&refund_deposit&token=' . $this->token . '" 
-                                class="btn btn-info btn-xs" title="Rembourser"
-                                onclick="return confirm(\'Êtes-vous sûr de vouloir rembourser cette caution ?\')">
-                                <i class="icon-undo"></i>
-                             </a>';
+                $html .= '<a href="' . $base_url . '&refund_deposit=' . $id_deposit . '" class="btn btn-xs btn-warning" title="Refund" onclick="return confirm(\'Refund this deposit?\')">
+                            <i class="icon-undo"></i>
+                          </a>';
                 break;
-        }
-
-        return $actions;
-    }
-
-    /**
-     * Traitement des actions personnalisées
-     */
-    public function postProcess()
-    {
-        // Actions sur les cautions
-        if (Tools::isSubmit('capture_deposit')) {
-            $this->captureDeposit();
-        } elseif (Tools::isSubmit('release_deposit')) {
-            $this->releaseDeposit();
-        } elseif (Tools::isSubmit('refund_deposit')) {
-            $this->refundDeposit();
-        } 
-        // Actions en lot
-        elseif (Tools::isSubmit('submitBulkreleasebooking_deposits')) {
-            $this->processBulkRelease();
-        } elseif (Tools::isSubmit('submitBulkcapturebooking_deposits')) {
-            $this->processBulkCapture();
-        }
-
-        parent::postProcess();
-    }
-
-    /**
-     * Capturer une caution individuelle
-     */
-    protected function captureDeposit()
-    {
-        $id_deposit = (int)Tools::getValue('id_deposit');
-        
-        if (!$id_deposit) {
-            $this->errors[] = $this->l('ID de caution invalide');
-            return;
-        }
-
-        try {
-            $depositManager = new StripeDepositManager();
-            
-            // Récupérer les informations de la réservation
-            $deposit = Db::getInstance()->getRow('
-                SELECT d.*, r.id_reserved, r.booking_reference 
-                FROM `' . _DB_PREFIX_ . 'booking_deposits` d
-                LEFT JOIN `' . _DB_PREFIX_ . 'booker_auth_reserved` r ON r.id_reserved = d.id_reservation
-                WHERE d.id_deposit = ' . $id_deposit
-            );
-
-            if (!$deposit) {
-                $this->errors[] = $this->l('Caution introuvable');
-                return;
-            }
-
-            if ($deposit['status'] !== 'authorized') {
-                $this->errors[] = $this->l('Cette caution ne peut pas être capturée (statut: ' . $deposit['status'] . ')');
-                return;
-            }
-
-            // Demander une raison pour la capture
-            $capture_reason = Tools::getValue('capture_reason', 'Capture manuelle par administrateur');
-
-            // Capturer via Stripe
-            $result = $depositManager->captureDeposit($deposit['id_reserved'], $capture_reason);
-
-            if ($result['success']) {
-                $this->confirmations[] = $this->l('Caution capturée avec succès pour la réservation ') . $deposit['booking_reference'];
                 
-                // Logger l'activité
-                $this->logActivity('deposit_captured', 'Capture manuelle de la caution', $deposit['id_reserved']);
-            } else {
-                $this->errors[] = $this->l('Erreur lors de la capture : ') . $result['error'];
-            }
-
-        } catch (Exception $e) {
-            $this->errors[] = $this->l('Erreur technique : ') . $e->getMessage();
-        }
-    }
-
-    /**
-     * Libérer une caution individuelle
-     */
-    protected function releaseDeposit()
-    {
-        $id_deposit = (int)Tools::getValue('id_deposit');
-        
-        if (!$id_deposit) {
-            $this->errors[] = $this->l('ID de caution invalide');
-            return;
-        }
-
-        try {
-            $depositManager = new StripeDepositManager();
-            
-            // Récupérer les informations
-            $deposit = Db::getInstance()->getRow('
-                SELECT d.*, r.id_reserved, r.booking_reference 
-                FROM `' . _DB_PREFIX_ . 'booking_deposits` d
-                LEFT JOIN `' . _DB_PREFIX_ . 'booker_auth_reserved` r ON r.id_reserved = d.id_reservation
-                WHERE d.id_deposit = ' . $id_deposit
-            );
-
-            if (!$deposit) {
-                $this->errors[] = $this->l('Caution introuvable');
-                return;
-            }
-
-            if ($deposit['status'] !== 'authorized') {
-                $this->errors[] = $this->l('Cette caution ne peut pas être libérée (statut: ' . $deposit['status'] . ')');
-                return;
-            }
-
-            // Libérer via Stripe
-            $result = $depositManager->releaseDeposit($deposit['id_reserved']);
-
-            if ($result['success']) {
-                $this->confirmations[] = $this->l('Caution libérée avec succès pour la réservation ') . $deposit['booking_reference'];
+            case 'pending':
+            case 'failed':
+                $html .= '<a href="' . $base_url . '&retry_deposit=' . $id_deposit . '" class="btn btn-xs btn-primary" title="Retry" onclick="return confirm(\'Retry this deposit?\')">
+                            <i class="icon-refresh"></i>
+                          </a>';
+                break;
                 
-                // Logger l'activité
-                $this->logActivity('deposit_released', 'Libération manuelle de la caution', $deposit['id_reserved']);
-            } else {
-                $this->errors[] = $this->l('Erreur lors de la libération : ') . $result['error'];
-            }
-
-        } catch (Exception $e) {
-            $this->errors[] = $this->l('Erreur technique : ') . $e->getMessage();
+            default:
+                $html .= '<span class="text-muted">No actions</span>';
         }
+        
+        return $html;
     }
 
     /**
-     * Rembourser une caution
-     */
-    protected function refundDeposit()
-    {
-        $id_deposit = (int)Tools::getValue('id_deposit');
-        
-        if (!$id_deposit) {
-            $this->errors[] = $this->l('ID de caution invalide');
-            return;
-        }
-
-        try {
-            $depositManager = new StripeDepositManager();
-            
-            // Récupérer les informations
-            $deposit = Db::getInstance()->getRow('
-                SELECT d.*, r.id_reserved, r.booking_reference 
-                FROM `' . _DB_PREFIX_ . 'booking_deposits` d
-                LEFT JOIN `' . _DB_PREFIX_ . 'booker_auth_reserved` r ON r.id_reserved = d.id_reservation
-                WHERE d.id_deposit = ' . $id_deposit
-            );
-
-            if (!$deposit) {
-                $this->errors[] = $this->l('Caution introuvable');
-                return;
-            }
-
-            if ($deposit['status'] !== 'captured') {
-                $this->errors[] = $this->l('Cette caution ne peut pas être remboursée (statut: ' . $deposit['status'] . ')');
-                return;
-            }
-
-            // Montant et raison du remboursement
-            $refund_amount = (int)Tools::getValue('refund_amount', $deposit['captured_amount']);
-            $refund_reason = Tools::getValue('refund_reason', 'Remboursement manuel par administrateur');
-
-            // Rembourser via Stripe
-            $result = $depositManager->refundDeposit($deposit['id_reserved'], $refund_amount, $refund_reason);
-
-            if ($result['success']) {
-                $currency = new Currency(Configuration::get('PS_CURRENCY_DEFAULT'));
-                $amount_display = Tools::displayPrice($refund_amount / 100, $currency);
-                
-                $this->confirmations[] = $this->l('Remboursement de ') . $amount_display . 
-                                       $this->l(' effectué avec succès pour la réservation ') . $deposit['booking_reference'];
-                
-                // Logger l'activité
-                $this->logActivity('deposit_refunded', 'Remboursement manuel: ' . $amount_display, $deposit['id_reserved']);
-            } else {
-                $this->errors[] = $this->l('Erreur lors du remboursement : ') . $result['error'];
-            }
-
-        } catch (Exception $e) {
-            $this->errors[] = $this->l('Erreur technique : ') . $e->getMessage();
-        }
-    }
-
-    /**
-     * Traitement des actions en lot - Libération
-     */
-    protected function processBulkRelease()
-    {
-        $deposit_ids = Tools::getValue('booking_depositsBox');
-        
-        if (!is_array($deposit_ids) || empty($deposit_ids)) {
-            $this->errors[] = $this->l('Aucune caution sélectionnée');
-            return;
-        }
-
-        $success_count = 0;
-        $error_count = 0;
-        $depositManager = new StripeDepositManager();
-
-        foreach ($deposit_ids as $id_deposit) {
-            try {
-                // Récupérer les informations de la caution
-                $deposit = Db::getInstance()->getRow('
-                    SELECT d.*, r.id_reserved, r.booking_reference 
-                    FROM `' . _DB_PREFIX_ . 'booking_deposits` d
-                    LEFT JOIN `' . _DB_PREFIX_ . 'booker_auth_reserved` r ON r.id_reserved = d.id_reservation
-                    WHERE d.id_deposit = ' . (int)$id_deposit
-                );
-
-                if ($deposit && $deposit['status'] === 'authorized') {
-                    $result = $depositManager->releaseDeposit($deposit['id_reserved']);
-                    
-                    if ($result['success']) {
-                        $success_count++;
-                        $this->logActivity('bulk_deposit_released', 'Libération en lot', $deposit['id_reserved']);
-                    } else {
-                        $error_count++;
-                    }
-                } else {
-                    $error_count++;
-                }
-            } catch (Exception $e) {
-                $error_count++;
-            }
-        }
-
-        if ($success_count > 0) {
-            $this->confirmations[] = sprintf($this->l('%d caution(s) libérée(s) avec succès'), $success_count);
-        }
-        
-        if ($error_count > 0) {
-            $this->errors[] = sprintf($this->l('%d erreur(s) lors de la libération'), $error_count);
-        }
-    }
-
-    /**
-     * Traitement des actions en lot - Capture
-     */
-    protected function processBulkCapture()
-    {
-        $deposit_ids = Tools::getValue('booking_depositsBox');
-        
-        if (!is_array($deposit_ids) || empty($deposit_ids)) {
-            $this->errors[] = $this->l('Aucune caution sélectionnée');
-            return;
-        }
-
-        $success_count = 0;
-        $error_count = 0;
-        $depositManager = new StripeDepositManager();
-
-        foreach ($deposit_ids as $id_deposit) {
-            try {
-                // Récupérer les informations de la caution
-                $deposit = Db::getInstance()->getRow('
-                    SELECT d.*, r.id_reserved, r.booking_reference 
-                    FROM `' . _DB_PREFIX_ . 'booking_deposits` d
-                    LEFT JOIN `' . _DB_PREFIX_ . 'booker_auth_reserved` r ON r.id_reserved = d.id_reservation
-                    WHERE d.id_deposit = ' . (int)$id_deposit
-                );
-
-                if ($deposit && $deposit['status'] === 'authorized') {
-                    $result = $depositManager->captureDeposit($deposit['id_reserved'], 'Capture en lot par administrateur');
-                    
-                    if ($result['success']) {
-                        $success_count++;
-                        $this->logActivity('bulk_deposit_captured', 'Capture en lot', $deposit['id_reserved']);
-                    } else {
-                        $error_count++;
-                    }
-                } else {
-                    $error_count++;
-                }
-            } catch (Exception $e) {
-                $error_count++;
-            }
-        }
-
-        if ($success_count > 0) {
-            $this->confirmations[] = sprintf($this->l('%d caution(s) capturée(s) avec succès'), $success_count);
-        }
-        
-        if ($error_count > 0) {
-            $this->errors[] = sprintf($this->l('%d erreur(s) lors de la capture'), $error_count);
-        }
-    }
-
-    /**
-     * Vue détaillée d'une caution
+     * Formulaire de détails d'une caution
      */
     public function renderView()
     {
         $id_deposit = (int)Tools::getValue('id_deposit');
         
         if (!$id_deposit) {
-            $this->errors[] = $this->l('ID de caution invalide');
-            return '';
+            $this->errors[] = $this->l('Invalid deposit ID');
+            return;
         }
-
-        // Récupérer toutes les informations de la caution
-        $deposit_full = Db::getInstance()->getRow('
-            SELECT d.*, r.*, b.name as booker_name,
-                   (d.deposit_amount / 100) as deposit_amount_display,
-                   (d.captured_amount / 100) as captured_amount_display,
-                   (d.refunded_amount / 100) as refunded_amount_display
-            FROM `' . _DB_PREFIX_ . 'booking_deposits` d
-            LEFT JOIN `' . _DB_PREFIX_ . 'booker_auth_reserved` r ON r.id_reserved = d.id_reservation
-            LEFT JOIN `' . _DB_PREFIX_ . 'booker` b ON b.id_booker = r.id_booker
-            WHERE d.id_deposit = ' . $id_deposit
-        );
-
-        if (!$deposit_full) {
-            $this->errors[] = $this->l('Caution introuvable');
-            return '';
+        
+        // Récupérer les détails de la caution
+        $deposit = $this->getDepositDetails($id_deposit);
+        if (!$deposit) {
+            $this->errors[] = $this->l('Deposit not found');
+            return;
         }
-
-        // Récupérer l'historique des actions
-        $history = Db::getInstance()->executeS('
-            SELECT * FROM `' . _DB_PREFIX_ . 'booking_deposit_history`
-            WHERE id_deposit = ' . $id_deposit . '
-            ORDER BY date_add DESC
-        ');
-
-        // Assigner les variables au template
-        $this->tpl_view_vars = array(
-            'deposit' => $deposit_full,
+        
+        // Récupérer l'historique
+        $history = $this->getDepositHistory($id_deposit);
+        
+        // Récupérer les métadonnées Stripe
+        $stripe_metadata = json_decode($deposit['metadata'], true);
+        
+        $this->context->smarty->assign(array(
+            'deposit' => $deposit,
             'history' => $history,
-            'currency' => new Currency(Configuration::get('PS_CURRENCY_DEFAULT'))
-        );
-
-        return parent::renderView();
+            'stripe_metadata' => $stripe_metadata,
+            'currency_sign' => $this->context->currency->sign,
+            'can_capture' => $deposit['status'] == 'authorized',
+            'can_release' => $deposit['status'] == 'authorized',
+            'can_refund' => $deposit['status'] == 'captured',
+            'stripe_dashboard_url' => $this->getStripeDashboardUrl($deposit),
+            'module_dir' => _MODULE_DIR_ . 'booking/'
+        ));
+        
+        return $this->context->smarty->fetch(_PS_MODULE_DIR_ . 'booking/views/templates/admin/deposit_details.tpl');
     }
 
     /**
-     * Ajouter CSS et JS spécifiques
+     * Récupérer les détails complets d'une caution
+     */
+    private function getDepositDetails($id_deposit)
+    {
+        $sql = 'SELECT d.*, r.booking_reference, r.customer_firstname, r.customer_lastname, 
+                       r.customer_email, r.date_reserved, r.total_price, r.status as reservation_status,
+                       b.name as booker_name, b.location
+                FROM ' . _DB_PREFIX_ . 'booking_deposits d
+                LEFT JOIN ' . _DB_PREFIX_ . 'booker_auth_reserved r ON d.id_reservation = r.id_reserved
+                LEFT JOIN ' . _DB_PREFIX_ . 'booker b ON r.id_booker = b.id_booker
+                WHERE d.id_deposit = ' . (int)$id_deposit;
+        
+        $result = Db::getInstance()->getRow($sql);
+        
+        if ($result) {
+            // Convertir les montants en euros
+            $result['deposit_amount_euros'] = $result['deposit_amount'] / 100;
+            $result['captured_amount_euros'] = $result['captured_amount'] / 100;
+            $result['refunded_amount_euros'] = $result['refunded_amount'] / 100;
+        }
+        
+        return $result;
+    }
+
+    /**
+     * Récupérer l'historique d'une caution
+     */
+    private function getDepositHistory($id_deposit)
+    {
+        $sql = 'SELECT h.*, e.firstname as employee_firstname, e.lastname as employee_lastname
+                FROM ' . _DB_PREFIX_ . 'booking_deposit_history h
+                LEFT JOIN ' . _DB_PREFIX_ . 'employee e ON h.id_employee = e.id_employee
+                WHERE h.id_deposit = ' . (int)$id_deposit . '
+                ORDER BY h.date_add DESC';
+        
+        $results = Db::getInstance()->executeS($sql);
+        
+        foreach ($results as &$row) {
+            $row['amount_euros'] = $row['amount'] ? $row['amount'] / 100 : 0;
+            $row['employee_name'] = trim($row['employee_firstname'] . ' ' . $row['employee_lastname']);
+            if (empty($row['employee_name'])) {
+                $row['employee_name'] = 'System';
+            }
+        }
+        
+        return $results;
+    }
+
+    /**
+     * Générer l'URL du dashboard Stripe
+     */
+    private function getStripeDashboardUrl($deposit)
+    {
+        $test_mode = Configuration::get('BOOKING_STRIPE_TEST_MODE');
+        $base_url = $test_mode ? 'https://dashboard.stripe.com/test' : 'https://dashboard.stripe.com';
+        
+        if (!empty($deposit['payment_intent_id'])) {
+            return $base_url . '/payments/' . $deposit['payment_intent_id'];
+        } elseif (!empty($deposit['setup_intent_id'])) {
+            return $base_url . '/setup_intents/' . $deposit['setup_intent_id'];
+        }
+        
+        return $base_url;
+    }
+
+    /**
+     * Traitement des actions sur les cautions
+     */
+    public function postProcess()
+    {
+        if (Tools::isSubmit('capture_deposit')) {
+            $this->processCaptureDeposit();
+        } elseif (Tools::isSubmit('release_deposit')) {
+            $this->processReleaseDeposit();
+        } elseif (Tools::isSubmit('refund_deposit')) {
+            $this->processRefundDeposit();
+        } elseif (Tools::isSubmit('retry_deposit')) {
+            $this->processRetryDeposit();
+        }
+        
+        return parent::postProcess();
+    }
+
+    /**
+     * Capturer une caution
+     */
+    private function processCaptureDeposit()
+    {
+        $id_deposit = (int)Tools::getValue('capture_deposit');
+        
+        if (!$id_deposit) {
+            $this->errors[] = $this->l('Invalid deposit ID');
+            return;
+        }
+        
+        try {
+            $depositManager = new StripeDepositManager();
+            $result = $depositManager->captureDepositById($id_deposit);
+            
+            if ($result['success']) {
+                $this->confirmations[] = $this->l('Deposit captured successfully');
+                
+                // Logger l'action
+                $this->logDepositAction($id_deposit, 'manual_capture', 'Captured manually by admin');
+            } else {
+                $this->errors[] = $this->l('Failed to capture deposit: ') . $result['error'];
+            }
+            
+        } catch (Exception $e) {
+            $this->errors[] = $this->l('Error capturing deposit: ') . $e->getMessage();
+        }
+    }
+
+    /**
+     * Libérer une caution
+     */
+    private function processReleaseDeposit()
+    {
+        $id_deposit = (int)Tools::getValue('release_deposit');
+        
+        if (!$id_deposit) {
+            $this->errors[] = $this->l('Invalid deposit ID');
+            return;
+        }
+        
+        try {
+            $depositManager = new StripeDepositManager();
+            $result = $depositManager->releaseDepositById($id_deposit);
+            
+            if ($result['success']) {
+                $this->confirmations[] = $this->l('Deposit released successfully');
+                
+                // Logger l'action
+                $this->logDepositAction($id_deposit, 'manual_release', 'Released manually by admin');
+            } else {
+                $this->errors[] = $this->l('Failed to release deposit: ') . $result['error'];
+            }
+            
+        } catch (Exception $e) {
+            $this->errors[] = $this->l('Error releasing deposit: ') . $e->getMessage();
+        }
+    }
+
+    /**
+     * Rembourser une caution
+     */
+    private function processRefundDeposit()
+    {
+        $id_deposit = (int)Tools::getValue('refund_deposit');
+        $refund_amount = Tools::getValue('refund_amount');
+        $refund_reason = Tools::getValue('refund_reason', 'Manual refund by admin');
+        
+        if (!$id_deposit) {
+            $this->errors[] = $this->l('Invalid deposit ID');
+            return;
+        }
+        
+        try {
+            $depositManager = new StripeDepositManager();
+            $result = $depositManager->refundDeposit($id_deposit, $refund_amount, $refund_reason);
+            
+            if ($result['success']) {
+                $this->confirmations[] = $this->l('Deposit refunded successfully');
+                
+                // Logger l'action
+                $this->logDepositAction($id_deposit, 'manual_refund', 'Refunded manually by admin: ' . $refund_reason);
+            } else {
+                $this->errors[] = $this->l('Failed to refund deposit: ') . $result['error'];
+            }
+            
+        } catch (Exception $e) {
+            $this->errors[] = $this->l('Error refunding deposit: ') . $e->getMessage();
+        }
+    }
+
+    /**
+     * Réessayer une caution
+     */
+    private function processRetryDeposit()
+    {
+        $id_deposit = (int)Tools::getValue('retry_deposit');
+        
+        if (!$id_deposit) {
+            $this->errors[] = $this->l('Invalid deposit ID');
+            return;
+        }
+        
+        try {
+            $depositManager = new StripeDepositManager();
+            $result = $depositManager->retryDeposit($id_deposit);
+            
+            if ($result['success']) {
+                $this->confirmations[] = $this->l('Deposit retry initiated successfully');
+                
+                // Logger l'action
+                $this->logDepositAction($id_deposit, 'manual_retry', 'Retried manually by admin');
+            } else {
+                $this->errors[] = $this->l('Failed to retry deposit: ') . $result['error'];
+            }
+            
+        } catch (Exception $e) {
+            $this->errors[] = $this->l('Error retrying deposit: ') . $e->getMessage();
+        }
+    }
+
+    /**
+     * Logger une action sur une caution
+     */
+    private function logDepositAction($id_deposit, $action_type, $details)
+    {
+        $deposit = $this->getDepositDetails($id_deposit);
+        if (!$deposit) {
+            return;
+        }
+        
+        $data = array(
+            'id_deposit' => $id_deposit,
+            'id_reservation' => $deposit['id_reservation'],
+            'action_type' => pSQL($action_type),
+            'old_status' => pSQL($deposit['status']),
+            'new_status' => pSQL($deposit['status']), // Sera mis à jour par le StripeDepositManager
+            'details' => pSQL($details),
+            'id_employee' => isset($this->context->employee) ? (int)$this->context->employee->id : null,
+            'date_add' => date('Y-m-d H:i:s')
+        );
+        
+        return Db::getInstance()->insert('booking_deposit_history', $data);
+    }
+
+    /**
+     * Actions en lot sur les cautions
+     */
+    public function processBulkCaptureSelection()
+    {
+        $selection = Tools::getValue($this->table . 'Box');
+        
+        if (is_array($selection) && count($selection)) {
+            $processed = 0;
+            $depositManager = new StripeDepositManager();
+            
+            foreach ($selection as $id_deposit) {
+                try {
+                    $result = $depositManager->captureDepositById((int)$id_deposit);
+                    if ($result['success']) {
+                        $this->logDepositAction($id_deposit, 'bulk_capture', 'Captured in bulk action');
+                        $processed++;
+                    }
+                } catch (Exception $e) {
+                    // Log l'erreur mais continue
+                    PrestaShopLogger::addLog('Bulk capture error for deposit ' . $id_deposit . ': ' . $e->getMessage(), 3);
+                }
+            }
+            
+            $this->confirmations[] = sprintf($this->l('%d deposits captured successfully'), $processed);
+        }
+    }
+
+    /**
+     * Actions en lot - libération
+     */
+    public function processBulkReleaseSelection()
+    {
+        $selection = Tools::getValue($this->table . 'Box');
+        
+        if (is_array($selection) && count($selection)) {
+            $processed = 0;
+            $depositManager = new StripeDepositManager();
+            
+            foreach ($selection as $id_deposit) {
+                try {
+                    $result = $depositManager->releaseDepositById((int)$id_deposit);
+                    if ($result['success']) {
+                        $this->logDepositAction($id_deposit, 'bulk_release', 'Released in bulk action');
+                        $processed++;
+                    }
+                } catch (Exception $e) {
+                    PrestaShopLogger::addLog('Bulk release error for deposit ' . $id_deposit . ': ' . $e->getMessage(), 3);
+                }
+            }
+            
+            $this->confirmations[] = sprintf($this->l('%d deposits released successfully'), $processed);
+        }
+    }
+
+    /**
+     * Export CSV des cautions
+     */
+    public function processBulkExportCsv()
+    {
+        $selection = Tools::getValue($this->table . 'Box');
+        
+        if (is_array($selection) && count($selection)) {
+            $this->exportDepositsCSV($selection);
+        } else {
+            $this->exportDepositsCSV(); // Export toutes les cautions
+        }
+    }
+
+    /**
+     * Exporter les cautions en CSV
+     */
+    private function exportDepositsCSV($ids = null)
+    {
+        $where = '';
+        if ($ids && is_array($ids)) {
+            $where = 'WHERE d.id_deposit IN (' . implode(',', array_map('intval', $ids)) . ')';
+        }
+        
+        $sql = 'SELECT d.*, r.booking_reference, r.customer_firstname, r.customer_lastname, 
+                       r.customer_email, r.date_reserved, b.name as booker_name
+                FROM ' . _DB_PREFIX_ . 'booking_deposits d
+                LEFT JOIN ' . _DB_PREFIX_ . 'booker_auth_reserved r ON d.id_reservation = r.id_reserved
+                LEFT JOIN ' . _DB_PREFIX_ . 'booker b ON r.id_booker = b.id_booker
+                ' . $where . '
+                ORDER BY d.date_add DESC';
+        
+        $deposits = Db::getInstance()->executeS($sql);
+        
+        if (empty($deposits)) {
+            $this->errors[] = $this->l('No deposits to export');
+            return;
+        }
+        
+        // Générer le CSV
+        $filename = 'booking_deposits_' . date('Y-m-d_H-i-s') . '.csv';
+        
+        header('Content-Type: text/csv; charset=utf-8');
+        header('Content-Disposition: attachment; filename=' . $filename);
+        
+        $output = fopen('php://output', 'w');
+        
+        // En-têtes CSV
+        fputcsv($output, array(
+            'Deposit ID',
+            'Booking Reference',
+            'Customer Name',
+            'Customer Email',
+            'Booker Name',
+            'Date Reserved',
+            'Deposit Amount (€)',
+            'Captured Amount (€)',
+            'Refunded Amount (€)',
+            'Status',
+            'Stripe Payment Intent',
+            'Date Authorized',
+            'Date Captured',
+            'Date Released',
+            'Date Created'
+        ));
+        
+        // Données
+        foreach ($deposits as $deposit) {
+            fputcsv($output, array(
+                $deposit['id_deposit'],
+                $deposit['booking_reference'],
+                trim($deposit['customer_firstname'] . ' ' . $deposit['customer_lastname']),
+                $deposit['customer_email'],
+                $deposit['booker_name'],
+                $deposit['date_reserved'],
+                number_format($deposit['deposit_amount'] / 100, 2),
+                number_format($deposit['captured_amount'] / 100, 2),
+                number_format($deposit['refunded_amount'] / 100, 2),
+                $deposit['status'],
+                $deposit['payment_intent_id'],
+                $deposit['date_authorized'],
+                $deposit['date_captured'],
+                $deposit['date_released'],
+                $deposit['date_add']
+            ));
+        }
+        
+        fclose($output);
+        exit;
+    }
+
+    /**
+     * Ajouter CSS et JS pour les cautions
      */
     public function setMedia()
     {
@@ -557,37 +708,50 @@ class AdminBookerDepositsController extends ModuleAdminController
         
         $this->addCSS(_MODULE_DIR_ . 'booking/views/css/admin-deposits.css');
         $this->addJS(_MODULE_DIR_ . 'booking/views/js/admin-deposits.js');
-    }
-
-    /**
-     * Logger les activités
-     */
-    protected function logActivity($action, $details = null, $id_reservation = null)
-    {
-        $employee_id = isset($this->context->employee) ? $this->context->employee->id : null;
         
-        return Db::getInstance()->execute('
-            INSERT INTO `' . _DB_PREFIX_ . 'booking_activity_log`
-            (id_reservation, action, details, id_employee, date_add)
-            VALUES (
-                ' . ($id_reservation ? (int)$id_reservation : 'NULL') . ',
-                "' . pSQL($action) . '",
-                ' . ($details ? '"' . pSQL($details) . '"' : 'NULL') . ',
-                ' . ($employee_id ? (int)$employee_id : 'NULL') . ',
-                NOW()
+        // Configuration JavaScript
+        Media::addJsDef(array(
+            'bookingDepositsConfig' => array(
+                'ajax_url' => $this->context->link->getAdminLink('AdminBookerDeposits'),
+                'token' => $this->token,
+                'stripe_test_mode' => Configuration::get('BOOKING_STRIPE_TEST_MODE'),
+                'currency_sign' => $this->context->currency->sign,
+                'translations' => array(
+                    'confirm_capture' => $this->l('Are you sure you want to capture this deposit?'),
+                    'confirm_release' => $this->l('Are you sure you want to release this deposit?'),
+                    'confirm_refund' => $this->l('Are you sure you want to refund this deposit?'),
+                    'processing' => $this->l('Processing...'),
+                    'success' => $this->l('Action completed successfully'),
+                    'error' => $this->l('An error occurred')
+                )
             )
-        ');
+        ));
     }
 
     /**
-     * Configuration de l'aide contextuelle
+     * Toolbar avec statistiques
      */
-    public function renderForm()
+    public function initToolbar()
     {
-        $this->context->smarty->assign([
-            'help_box' => $this->l('Cette interface permet de gérer les cautions Stripe des réservations. Vous pouvez capturer, libérer ou rembourser les cautions selon leur statut.')
-        ]);
-
-        return parent::renderForm();
+        parent::initToolbar();
+        
+        $this->toolbar_btn['stats'] = array(
+            'href' => self::$currentIndex . '&configure=booking&token=' . $this->token . '&deposit_stats=1',
+            'desc' => $this->l('Deposit Statistics'),
+            'icon' => 'process-icon-stats'
+        );
+        
+        $this->toolbar_btn['stripe_dashboard'] = array(
+            'href' => $this->getStripeDashboardUrl(array()),
+            'desc' => $this->l('Stripe Dashboard'),
+            'icon' => 'process-icon-external-link',
+            'target' => '_blank'
+        );
+        
+        $this->toolbar_btn['sync_stripe'] = array(
+            'href' => self::$currentIndex . '&configure=booking&token=' . $this->token . '&sync_stripe=1',
+            'desc' => $this->l('Sync with Stripe'),
+            'icon' => 'process-icon-refresh'
+        );
     }
 }
