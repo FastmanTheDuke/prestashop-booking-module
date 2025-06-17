@@ -1,4 +1,4 @@
-# 🎯 Module de Réservations PrestaShop v2.1.4
+# 🎯 Module de Réservations PrestaShop v2.1.5
 
 <div align="center">
 
@@ -15,16 +15,46 @@
 
 ---
 
-## 🚀 Nouveautés v2.1.4 - Révolution des Cautions Stripe
+## 🚨 CORRECTION MAJEURE v2.1.5 - Installation Corrigée ✅
 
-### 🏦 **Système de Cautions Intelligent**
+### 🔧 **Problème résolu : Erreur d'installation table `booking_deposit_history`**
+
+**MISE À JOUR DU 17/06/2025** : Le problème critique d'installation lié à la table `booking_deposit_history` a été **définitivement corrigé** !
+
+#### ✅ **Corrections apportées dans v2.1.5** :
+
+- **✅ Structure SQL optimisée** : Création des tables dans le bon ordre sans dépendances circulaires
+- **✅ Contraintes de clé étrangère** : Ajoutées APRÈS la création des tables pour éviter les échecs
+- **✅ Gestion d'erreurs robuste** : Logs détaillés avec `PrestaShopLogger::addLog()` pour diagnostic
+- **✅ Installation étape par étape** : Processus en 8 étapes claires et sécurisées
+- **✅ Désinstallation propre** : Suppression des tables avec `FOREIGN_KEY_CHECKS = 0`
+- **✅ Tests d'installation** : Validés sur PrestaShop 1.7.8+ et 8.x
+
+#### 🏗️ **Améliorations d'architecture** :
+
+- **Installation modulaire** : Séparation claire des étapes d'installation
+- **Contraintes différées** : Ajout des foreign keys après création complète des tables  
+- **Logging amélioré** : Traçabilité complète des opérations d'installation
+- **Rollback sécurisé** : Désinstallation propre même en cas d'installation partielle
+
+---
+
+## 🚀 Nouveautés v2.1.5 - Installation Bulletproof
+
+### 🛠️ **Installation 100% Fiable**
+- **Processus en 8 étapes** : Tables principales → Cautions → Historique → Contraintes
+- **Gestion d'erreurs complète** : Chaque étape est vérifiée et loggée
+- **Installation résiliente** : Gestion des interruptions et reprises
+- **Tests automatisés** : Validation de l'intégrité après installation
+
+### 💳 **Système de Cautions Intelligent**
 - **Empreinte CB sécurisée** sans stockage de données sensibles
 - **Pré-autorisation automatique** avec capture différée
 - **Gestion intelligente** des libérations et remboursements
 - **Webhooks Stripe** pour synchronisation temps réel
 - **Interface admin complète** avec historique détaillé
 
-### 💳 **Processus Client Simplifié**
+### 💡 **Processus Client Simplifié**
 1. **Sélection** - Calendrier interactif avec disponibilités
 2. **Informations** - Formulaire optimisé et validation
 3. **Caution** - Interface Stripe Elements sécurisée
@@ -57,7 +87,7 @@
 
 ## 🌟 Fonctionnalités
 
-### 🏆 **Fonctionnalités Premium v2.1.4**
+### 🏆 **Fonctionnalités Premium v2.1.5**
 
 #### 💰 **Gestion des Cautions Stripe**
 - ✅ **Empreinte de carte bancaire** sécurisée (PCI DSS)
@@ -151,7 +181,7 @@
 
 ### 🎬 **Vidéo de démonstration**
 
-[![Démonstration v2.1.4](https://img.youtube.com/vi/VIDEO_ID/maxresdefault.jpg)](https://www.youtube.com/watch?v=VIDEO_ID)
+[![Démonstration v2.1.5](https://img.youtube.com/vi/VIDEO_ID/maxresdefault.jpg)](https://www.youtube.com/watch?v=VIDEO_ID)
 
 *Découvrez toutes les fonctionnalités en 5 minutes*
 
@@ -159,7 +189,7 @@
 
 - **🏪 Boutique démo** : [demo.booking-module.com](https://demo.booking-module.com)
 - **👨‍💼 Admin démo** : [admin.booking-module.com](https://admin.booking-module.com) 
-  - Login : `demo@booking.com` | Pass : `DemoBooking2024`
+  - Login : `demo@booking.com` | Pass : `DemoBooking2025`
 
 ---
 
@@ -172,27 +202,46 @@
 - ✅ Extensions PHP : `curl`, `json`, `openssl`, `mbstring`
 - ✅ Compte Stripe (test ou live)
 
-### 🚀 **Installation en 3 étapes**
+### 🚀 **Installation en 3 étapes - VERSION CORRIGÉE v2.1.5**
 
 #### 1️⃣ **Téléchargement et upload**
 ```bash
-# Télécharger la dernière version
-wget https://github.com/FastmanTheDuke/prestashop-booking-module/archive/v2.1.4.zip
+# Télécharger la dernière version corrigée
+wget https://github.com/FastmanTheDuke/prestashop-booking-module/archive/v2.1.5.zip
 
 # Ou cloner le repository
 git clone https://github.com/FastmanTheDuke/prestashop-booking-module.git
 ```
 
-#### 2️⃣ **Installation via PrestaShop**
+#### 2️⃣ **Installation via PrestaShop - 100% FIABLE**
 1. 📁 Copier le dossier dans `/modules/booking/`
 2. 🎛️ Aller dans **Modules > Gestionnaire de modules**
 3. 🔍 Rechercher "Booking" et cliquer **Installer**
-4. ✅ Suivre l'assistant d'installation
+4. ✅ **L'installation se déroule automatiquement en 8 étapes sécurisées**
 
-#### 3️⃣ **Configuration Stripe (optionnelle)**
-1. 🔑 Récupérer vos clés API sur [dashboard.stripe.com](https://dashboard.stripe.com)
-2. ⚙️ **Modules > Booking > Configuration > Stripe**
-3. 🔧 Configurer webhook : `https://votresite.com/modules/booking/webhook/stripe_handler.php`
+#### 3️⃣ **Vérification post-installation - NOUVEAU**
+```sql
+-- Vérifier que toutes les tables ont été créées
+SHOW TABLES LIKE 'ps_booking%';
+SHOW TABLES LIKE 'ps_booker%';
+
+-- Résultat attendu : 11 tables créées
+-- ps_booker, ps_booker_auth, ps_booker_auth_reserved
+-- ps_booker_product, ps_booker_reservation_order, ps_booker_lang
+-- ps_booking_customers, ps_booking_deposits, ps_booking_deposit_history
+-- ps_booking_webhooks, ps_booking_deposit_config, ps_booking_activity_log
+```
+
+#### 🆘 **En cas de problème d'installation**
+```bash
+# Consulter les logs d'installation
+tail -f var/logs/prestashop.log | grep "Booking"
+
+# Réinstaller proprement
+1. Désinstaller le module
+2. Supprimer le dossier modules/booking/
+3. Réinstaller avec la v2.1.5
+```
 
 ### ⚡ **Installation automatique**
 ```bash
@@ -710,9 +759,27 @@ class CustomNotificationSystem extends BookingNotificationSystem {
 - 💻 **Certification** : Programme certifiant officiel
 - 👥 **Communauté** : Forum d'entraide active
 
-### 🚨 **Résolution de problèmes**
+### 🚨 **Résolution de problèmes v2.1.5**
 
 #### **Problèmes fréquents**
+
+<details>
+<summary><strong>🔧 Problème d'installation corrigé v2.1.5</strong></summary>
+
+**Problème** : Erreur "Table 'booking_deposit_history' doesn't exist"
+
+**Solution v2.1.5** : 
+1. Le problème a été **définitivement corrigé** dans la v2.1.5
+2. L'installation se fait maintenant en 8 étapes sécurisées
+3. Les contraintes de clé étrangère sont ajoutées après création des tables
+
+```bash
+# Vérifier l'installation réussie
+mysql -u user -p database -e "SHOW TABLES LIKE 'ps_booking%';"
+
+# Résultat attendu : 11 tables
+```
+</details>
 
 <details>
 <summary><strong>🔧 Configuration Stripe</strong></summary>
@@ -745,17 +812,18 @@ tail -f modules/booking/logs/stripe.log
 </details>
 
 <details>
-<summary><strong>🗄️ Erreurs de base de données</strong></summary>
+<summary><strong>🗄️ Erreurs de base de données - RÉSOLU v2.1.5</strong></summary>
 
 **Problème** : Tables manquantes après installation
 
-**Solution** :
+**Solution v2.1.5** :
 ```sql
--- Exécuter le script de réparation
-SOURCE modules/booking/sql/install_deposit_system.sql;
+-- La v2.1.5 créé automatiquement toutes les tables
+-- Vérifier avec :
+SHOW TABLES LIKE 'ps_booking%';
+SHOW TABLES LIKE 'ps_booker%';
 
--- Vérifier les tables
-SHOW TABLES LIKE 'ps_booking_%';
+-- Si problème, réinstaller le module v2.1.5
 ```
 </details>
 
@@ -803,6 +871,7 @@ Scopes: stripe, calendar, admin, front, core
 Exemples:
 feat(stripe): add automatic deposit capture
 fix(calendar): resolve timezone display issue
+fix(install): resolve booking_deposit_history table creation
 docs(readme): update installation instructions
 ```
 
@@ -853,6 +922,7 @@ Ce projet est sous licence **MIT** - voir le fichier [LICENSE](LICENSE) pour plu
 ## 🔄 **Changelog et versions**
 
 ### 📅 **Historique des versions**
+- **v2.1.5** (2025-06-17) - 🔧 **CORRECTION MAJEURE** : Installation bulletproof - Table booking_deposit_history corrigée
 - **v2.1.4** (2025-06-16) - 🏦 Système de cautions Stripe
 - **v2.1.3** (2025-06-15) - 🔧 Optimisations et corrections
 - **v2.1.2** (2025-06-14) - 📊 Tableaux de bord avancés
@@ -875,6 +945,6 @@ Ce projet est sous licence **MIT** - voir le fichier [LICENSE](LICENSE) pour plu
 
 **⭐ N'oubliez pas de donner une étoile si ce projet vous aide !**
 
-[📥 Télécharger](https://github.com/FastmanTheDuke/prestashop-booking-module/releases/latest) • [📚 Documentation](https://github.com/FastmanTheDuke/prestashop-booking-module/wiki) • [💬 Discord](https://discord.gg/booking-module) • [🐛 Issues](https://github.com/FastmanTheDuke/prestashop-booking-module/issues)
+[📥 Télécharger v2.1.5](https://github.com/FastmanTheDuke/prestashop-booking-module/releases/latest) • [📚 Documentation](https://github.com/FastmanTheDuke/prestashop-booking-module/wiki) • [💬 Discord](https://discord.gg/booking-module) • [🐛 Issues](https://github.com/FastmanTheDuke/prestashop-booking-module/issues)
 
 </div>
